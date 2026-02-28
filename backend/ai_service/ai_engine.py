@@ -1,0 +1,551 @@
+"""
+AI服务核心功能
+集成LangChain、Transformers和FAISS
+支持OpenAI API和GitHub Models
+"""
+import os
+from typing import List, Dict, Optional
+from django.conf import settings
+
+# LangChain相关导入
+try:
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    from langchain_community.vectorstores import FAISS
+    LANGCHAIN_AVAILABLE = True
+except ImportError as e:
+    LANGCHAIN_AVAILABLE = False
+    print(f"Warning: LangChain not available: {e}")
+    print("Install with: pip install langchain langchain-community langchain-openai openai")
+
+# Transformers相关导入
+try:
+    from transformers import pipeline
+    from sentence_transformers import SentenceTransformer
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
+    print("Warning: Transformers not available. Install with: pip install transformers sentence-transformers")
+
+
+class AIService:
+    """AI服务主类"""
+    
+    def __init__(self):
+        self.api_key = settings.OPENAI_API_KEY
+        self.model_name = settings.AI_MODEL_NAME
+        self.vector_db_path = settings.VECTOR_DB_PATH
+        self.api_base = getattr(settings, 'OPENAI_API_BASE', None)
+        self.use_github_models = getattr(settings, 'USE_GITHUB_MODELS', False)
+        
+        # 初始化LangChain
+        self.llm = None
+        self.embeddings = None
+        
+        if LANGCHAIN_AVAILABLE and self.api_key:
+            try:
+                llm_config = {
+                    'model': self.model_name,
+                    'temperature': 0.7,
+                    'api_key': self.api_key,
+                }
+                
+                # 如果使用GitHub Models，配置API Base
+                if self.use_github_models and self.api_base:
+                    llm_config['base_url'] = self.api_base
+                    print(f"✓ 使用GitHub Models: {self.model_name}")
+                elif self.api_key and self.api_key != 'your-openai-api-key-here':
+                    print(f"✓ 使用OpenAI API: {self.model_name}")
+                else:
+                    print("⚠ API密钥未配置，AI功能将使用备用模式")
+                    raise ValueError("API key not configured")
+                
+                self.llm = ChatOpenAI(**llm_config)
+                
+                # 嵌入模型配置（GitHub Models可能不提供embeddings）
+                if not self.use_github_models:
+                    self.embeddings = OpenAIEmbeddings(api_key=self.api_key)
+                else:
+                    print("⚠ GitHub Models不支持embeddings，将使用本地模型")
+                    
+            except Exception as e:
+                print(f"⚠ AI模型初始化失败: {e}")
+                self.llm = None
+                self.embeddings = None
+        
+        # 初始化向量数据库
+        self.vector_store = None
+        self._load_vector_store()
+        
+        # 初始化本地模型（备用方案）
+        self.local_embeddings = None
+        if TRANSFORMERS_AVAILABLE:
+            try:
+                self.local_embeddings = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+            except Exception as e:
+                print(f"Warning: Failed to load local embedding model: {e}")
+    
+    def _load_vector_store(self):
+        """加载FAISS向量数据库"""
+        if not self.embeddings:
+            return
+        
+        try:
+            if os.path.exists(self.vector_db_path):
+                self.vector_store = FAISS.load_local(
+                    self.vector_db_path,
+                    self.embeddings
+                )
+            else:
+                # 创建新的向量数据库
+                os.makedirs(self.vector_db_path, exist_ok=True)
+        except Exception as e:
+            print(f"Error loading vector store: {e}")
+    
+    def chat(self, message: str, history: List[Dict] = None) -> str:
+        """
+        AI聊天功能
+        
+        Args:
+            message: 用户消息
+            history: 对话历史
+        
+        Returns:
+            AI回复
+        """
+        if not self.llm:
+            print("⚠ LLM未初始化，使用备用响应模式")
+            return self._fallback_chat(message)
+        
+        try:
+            # 构建消息历史
+            messages = [
+                SystemMessage(content="""你是一位经验丰富的AI学习导师，专门帮助学生解答编程和技术相关的问题。
+                你的回答应该：
+                1. 清晰易懂，适合不同水平的学习者
+                2. 提供具体的例子和代码示例
+                3. 鼓励学生独立思考
+                4. 必要时推荐相关的学习资源
+                请用中文回答问题。""")
+            ]
+            
+            # 添加历史对话
+            if history:
+                for msg in history[-5:]:  # 保留最近5条对话
+                    if msg['role'] == 'user':
+                        messages.append(HumanMessage(content=msg['content']))
+                    elif msg['role'] == 'assistant':
+                        messages.append(AIMessage(content=msg['content']))
+            
+            # 添加当前消息
+            messages.append(HumanMessage(content=message))
+            
+            # 调用LLM
+            response = self.llm.invoke(messages)
+            return response.content
+        
+        except Exception as e:
+            print(f"⚠ AI服务调用失败: {type(e).__name__}: {e}")
+            print("  ↳ 使用备用响应模式")
+            return self._fallback_chat(message)
+    
+    def _fallback_chat(self, message: str) -> str:
+        """备用聊天响应 - 当AI服务不可用时提供有用的回答"""
+        message_lower = message.lower()
+        
+        # 问候语
+        greetings = ['你好', 'hello', 'hi', '您好', '嗨']
+        if any(g in message_lower for g in greetings):
+            return '''你好！👋 我是AI学习导师。
+
+虽然当前AI智能服务暂时不可用，但我仍可以为你提供基础的学习建议：
+
+📚 **学习建议：**
+• 浏览课程页面，查找感兴趣的主题
+• 从基础课程开始，循序渐进
+• 遇到问题时，尝试查阅官方文档
+• 多动手实践，理论结合实际
+
+如果你有具体的技术问题，可以详细描述，我会尽力提供帮助！'''
+        
+        # 技术关键词匹配
+        tech_responses = {
+            'python': '''**关于Python学习：** 🐍
+
+Python是一门优秀的编程语言，适合初学者入门。建议学习路径：
+
+1. **基础语法**：变量、数据类型、控制流
+2. **函数与模块**：函数定义、模块导入
+3. **面向对象**：类、继承、多态
+4. **常用库**：NumPy、Pandas、Requests
+5. **项目实践**：做小项目巩固知识
+
+**推荐资源：**
+• Python官方教程：https://docs.python.org/zh-cn/3/tutorial/
+• 菜鸟教程：实用的中文入门教程
+• 项目练习：LeetCode、牛客网''',
+            
+            'javascript': '''**关于JavaScript学习：** 📜
+
+JavaScript是Web开发的核心，学习路线建议：
+
+1. **语法基础**：变量、函数、对象
+2. **DOM操作**：选择器、事件处理
+3. **ES6+特性**：箭头函数、Promise、async/await
+4. **前端框架**：Vue、React、Angular
+5. **Node.js**：后端JavaScript开发
+
+**学习建议：**
+• 从基础开始，不要急于学框架
+• 多在浏览器控制台练习
+• 做小项目加深理解
+• 关注MDN文档（权威参考）''',
+            
+            'vue': '''**关于Vue.js学习：** 💚
+
+Vue是一个渐进式前端框架，易学易用：
+
+**Vue 3核心概念：**
+1. **Composition API**：更灵活的代码组织
+2. **响应式系统**：ref、reactive
+3. **组件通信**：props、emit、provide/inject
+4. **生命周期**：setup、onMounted等
+5. **路由与状态管理**：Vue Router、Pinia
+
+**学习建议：**
+• 先掌握JavaScript基础
+• 跟着官方文档学习
+• 做实战项目加深理解
+• 参考Vue Mastery视频教程''',
+            
+            'django': '''**关于Django学习：** 🎸
+
+Django是Python的全功能Web框架：
+
+**核心概念：**
+1. **MTV模式**：Model-Template-View
+2. **ORM系统**：数据库操作
+3. **路由配置**：URL映射
+4. **模板引擎**：动态HTML生成
+5. **表单处理**：数据验证
+
+**学习路径：**
+• 完成官方Tutorial
+• 理解Django的设计哲学
+• 学习Django REST framework（API开发）
+• 部署到生产环境
+
+**推荐资源：**
+• Django官方文档（必读）
+• Django Girls教程（适合初学者）''',
+            
+            'react': '''**关于React学习：** ⚛️
+
+React是流行的前端库：
+
+**核心概念：**
+1. **组件化**：函数组件、Class组件
+2. **JSX语法**：JavaScript + XML
+3. **Hooks**：useState、useEffect等
+4. **状态管理**：Redux、Context API
+5. **路由**：React Router
+
+**学习建议：**
+• 理解虚拟DOM概念
+• 掌握Hooks用法
+• 练习组件设计
+• 学习状态管理最佳实践''',
+            
+            'html': '''**关于HTML学习：** 📄
+
+HTML是网页的骨架：
+
+**学习要点：**
+• 常用标签：div、p、a、img、form等
+• 语义化标签：header、nav、article、section
+• 表单元素：input、select、textarea
+• HTML5新特性：video、canvas、本地存储
+
+建议配合CSS和JavaScript一起学习，形成完整的前端知识体系。''',
+            
+            'css': '''**关于CSS学习：** 🎨
+
+CSS美化网页外观：
+
+**学习路径：**
+1. **基础**：选择器、盒模型、定位
+2. **布局**：Flexbox、Grid
+3. **响应式**：媒体查询、移动优先
+4. **动画**：transition、animation
+5. **预处理器**：Sass、Less
+
+**实践建议：**
+• 多看优秀网站设计
+• 尝试重现经典布局
+• 学习CSS Tricks网站''',
+            
+            'git': '''**关于Git学习：** 🌳
+
+Git是必备的版本控制工具：
+
+**核心命令：**
+• git init / clone - 初始化仓库
+• git add / commit - 提交代码
+• git push / pull - 同步远程
+• git branch / merge - 分支管理
+• git rebase - 变基操作
+
+**学习建议：**
+• 理解Git工作流
+• 多练习分支操作
+• 学习解决冲突
+• 参考Git官方文档''',
+            
+            'sql': '''**关于SQL学习：** 🗄️
+
+SQL是数据库查询语言：
+
+**核心概念：**
+• SELECT - 查询数据
+• INSERT / UPDATE / DELETE - 增删改
+• JOIN - 表连接
+• GROUP BY - 分组统计
+• 子查询和视图
+
+**实践建议：**
+• 在MySQL或PostgreSQL上练习
+• LeetCode数据库题目
+• 理解索引和性能优化''',
+            
+            'api': '''**关于API开发：** 🔌
+
+API是系统间通信的桥梁：
+
+**RESTful API设计：**
+• HTTP方法：GET、POST、PUT、DELETE
+• 状态码：200、201、400、404、500
+• 认证：JWT、OAuth
+• 文档：Swagger、Postman
+
+**学习建议：**
+• 理解REST架构风格
+• 实践API设计原则
+• 学习接口安全
+• 做好错误处理和日志记录''',
+        }
+        
+        # 检查是否匹配技术关键词
+        for keyword, response in tech_responses.items():
+            if keyword in message_lower:
+                return response
+        
+        # 学习相关问题
+        learning_keywords = ['怎么学', '如何学', '学习方法', '入门', '开始学']
+        if any(k in message_lower for k in learning_keywords):
+            return '''**学习建议：** 📚
+
+无论学习什么技术，都可以遵循这些步骤：
+
+**1. 明确目标**
+• 确定要学什么、为什么学
+
+**2. 找好资源**
+• 官方文档是最权威的资料
+• 视频教程适合入门
+• 书籍适合系统学习
+
+**3. 动手实践**
+• 边学边做，理论结合实际
+• 从简单项目开始
+• 多看别人的代码
+
+**4. 持续学习**
+• 技术更新快，保持学习
+• 关注技术社区和博客
+• 参与开源项目
+
+如果你想学具体的技术（如Python、JavaScript、Vue等），可以告诉我，我会给你更详细的建议！'''
+        
+        # 错误排查
+        error_keywords = ['错误', 'error', 'bug', '问题', '报错', '不工作', '失败']
+        if any(k in message_lower for k in error_keywords):
+            return '''**调试建议：** 🔍
+
+遇到错误时，可以按这些步骤排查：
+
+**1. 阅读错误信息**
+• 仔细看错误提示，通常会指出问题所在
+• 注意错误类型和行号
+
+**2. 检查代码**
+• 检查语法错误（拼写、标点）
+• 确认变量是否定义
+• 验证数据类型是否正确
+
+**3. 搜索解决方案**
+• Google搜索错误信息
+• Stack Overflow查找类似问题
+• 查阅官方文档
+
+**4. 调试工具**
+• 使用print/console.log输出
+• 使用IDE调试器
+• 逐步排查问题
+
+**5. 寻求帮助**
+• 在技术论坛提问
+• 描述问题时提供完整信息
+• 包含错误信息和代码片段
+
+如果能提供具体的错误信息，我可以给出更针对性的建议。'''
+        
+        # 默认响应
+        return '''你好！我是AI学习导师。👨‍🏫
+
+**当前状态：** AI智能服务暂时运行在基础模式下。
+
+我可以为你提供以下帮助：
+
+**💡 提供学习建议**
+• Python、JavaScript、Vue、Django等技术的学习路径
+• 编程入门指导和最佳实践
+
+**🔍 解答常见问题**
+• 技术选型建议
+• 学习方法和资源推荐
+• 调试技巧
+
+**📚 推荐学习资源**
+• 官方文档链接
+• 优质教程推荐
+• 实战项目建议
+
+**请告诉我：**
+• 你想学习什么技术？
+• 遇到了什么具体问题？
+• 需要什么学习建议？
+
+我会尽力提供有用的帮助！✨'''
+    
+    def recommend_courses(self, user_profile: Dict, num_recommendations: int = 5) -> List[Dict]:
+        """
+        基于用户画像推荐课程
+        
+        Args:
+            user_profile: 用户画像数据
+            num_recommendations: 推荐数量
+        
+        Returns:
+            推荐课程列表
+        """
+        # 这里可以集成更复杂的推荐算法
+        # 目前使用简单的基于兴趣的推荐
+        
+        recommendations = []
+        
+        # 示例：基于用户学习历史推荐
+        if 'learning_history' in user_profile:
+            categories = user_profile.get('preferred_categories', [])
+            # 这里可以查询数据库获取相关课程
+            # 暂时返回模拟数据
+            recommendations = [
+                {
+                    'id': 1,
+                    'title': '推荐课程示例',
+                    'reason': '基于您的学习历史推荐'
+                }
+            ]
+        
+        return recommendations[:num_recommendations]
+    
+    def semantic_search(self, query: str, top_k: int = 5) -> List[Dict]:
+        """
+        语义搜索
+        
+        Args:
+            query: 搜索查询
+            top_k: 返回结果数量
+        
+        Returns:
+            搜索结果列表
+        """
+        if not self.vector_store:
+            return []
+        
+        try:
+            results = self.vector_store.similarity_search(query, k=top_k)
+            return [
+                {
+                    'content': doc.page_content,
+                    'metadata': doc.metadata
+                }
+                for doc in results
+            ]
+        except Exception as e:
+            print(f"Error in semantic search: {e}")
+            return []
+    
+    def add_to_knowledge_base(self, texts: List[str], metadatas: List[Dict] = None):
+        """
+        添加内容到知识库
+        
+        Args:
+            texts: 文本列表
+            metadatas: 元数据列表
+        """
+        if not self.embeddings:
+            return
+        
+        try:
+            # 文本分割
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=200
+            )
+            
+            documents = []
+            for i, text in enumerate(texts):
+                chunks = text_splitter.split_text(text)
+                for chunk in chunks:
+                    documents.append(chunk)
+            
+            # 创建或更新向量数据库
+            if self.vector_store is None:
+                self.vector_store = FAISS.from_texts(
+                    documents,
+                    self.embeddings,
+                    metadatas=metadatas
+                )
+            else:
+                self.vector_store.add_texts(documents, metadatas=metadatas)
+            
+            # 保存到磁盘
+            self.vector_store.save_local(self.vector_db_path)
+        
+        except Exception as e:
+            print(f"Error adding to knowledge base: {e}")
+    
+    def get_embeddings(self, text: str) -> Optional[List[float]]:
+        """
+        获取文本的向量表示
+        
+        Args:
+            text: 输入文本
+        
+        Returns:
+            向量表示
+        """
+        try:
+            if self.embeddings:
+                return self.embeddings.embed_query(text)
+            elif self.local_embeddings:
+                return self.local_embeddings.encode(text).tolist()
+        except Exception as e:
+            print(f"Error getting embeddings: {e}")
+        
+        return None
+
+
+# 全局AI服务实例
+ai_service = AIService()

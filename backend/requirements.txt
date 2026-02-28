@@ -1,0 +1,24 @@
+Django==5.0.1
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+channels==4.0.0
+channels-redis==4.2.0
+daphne==4.1.0
+python-dotenv==1.0.0
+PyJWT==2.8.0
+psycopg2-binary==2.9.9
+Pillow==10.2.0
+
+# AI相关（更新版本以兼容最新torch和修复弃用警告）
+langchain==0.1.20
+langchain-community==0.0.38
+langchain-openai==0.1.1
+transformers==4.38.0
+torch==2.5.1
+faiss-cpu==1.8.0
+sentence-transformers==2.5.0
+openai==1.23.0
+
+# 工具
+redis==5.0.1
+celery==5.3.6

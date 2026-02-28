@@ -1,0 +1,21 @@
+# 最小化依赖 - 核心功能（不包含AI）
+# 适用于快速测试和开发
+
+# Django核心
+Django==5.0.1
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+
+# WebSocket支持
+channels==4.0.0
+channels-redis==4.2.0
+daphne==4.1.0
+
+# 工具
+python-dotenv==1.0.0
+PyJWT==2.8.0
+Pillow==10.2.0
+redis==5.0.1
+
+# 可选：数据库
+psycopg2-binary==2.9.9

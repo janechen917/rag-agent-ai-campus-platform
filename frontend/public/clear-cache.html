@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>清除缓存 - 校园智慧学习平台</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            text-align: center;
+        }
+        h1 {
+            color: #303133;
+            margin-bottom: 20px;
+        }
+        p {
+            color: #606266;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #409EFF;
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #66b1ff;
+        }
+        .success {
+            color: #67C23A;
+            font-weight: bold;
+            display: none;
+            margin-top: 20px;
+        }
+        .info {
+            background: #ecf5ff;
+            border: 1px solid #d9ecff;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            color: #409eff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 清除缓存</h1>
+        <div class="info">
+            如果你看到空白页面或登录后显示异常，点击下面的按钮清除缓存的登录信息。
+        </div>
+        <p>这将清除浏览器中保存的旧登录令牌，让你重新登录系统。</p>
+        <button onclick="clearCache()">清除缓存并重新登录</button>
+        <p class="success" id="success">✅ 缓存已清除！正在跳转到登录页...</p>
+    </div>
+
+    <script>
+        function clearCache() {
+            // 清除 localStorage
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            
+            // 清除 sessionStorage
+            sessionStorage.clear();
+            
+            // 显示成功消息
+            document.getElementById('success').style.display = 'block';
+            
+            // 2秒后跳转到首页（会自动跳到登录页）
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
