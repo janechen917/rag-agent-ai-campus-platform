@@ -111,7 +111,7 @@ class CourseFileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'file_name', 'file_type', 'file_type_display',
             'file_size', 'file_size_display', 'description',
-            'file_url', 'uploaded_by_name', 'created_at'
+            'file_url', 'quiz_url', 'uploaded_by_name', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
     

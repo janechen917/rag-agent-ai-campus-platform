@@ -150,7 +150,7 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 
 # AI服务配置
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '') or os.getenv('GITHUB_TOKEN', '')
 AI_MODEL_NAME = os.getenv('AI_MODEL_NAME', 'gpt-4o-mini')
 
 # GitHub Models配置（免费使用AI模型）

@@ -41,8 +41,9 @@
               <el-table-column prop="file_name" label="文件名" min-width="200">
                 <template #default="scope">
                   <div style="display: flex; align-items: center; gap: 8px;">
-                    <el-icon :size="20" color="#409EFF">
-                      <Document />
+                    <el-icon :size="20" :color="scope.row.file_type === 'quiz' ? '#E6A23C' : '#409EFF'">
+                      <Link v-if="scope.row.file_type === 'quiz'" />
+                      <Document v-else />
                     </el-icon>
                     <span>{{ scope.row.file_name }}</span>
                   </div>
@@ -55,7 +56,11 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="file_size_display" label="文件大小" width="100" />
+              <el-table-column prop="file_size_display" label="文件大小" width="100">
+                <template #default="scope">
+                  {{ scope.row.file_type === 'quiz' ? '-' : scope.row.file_size_display }}
+                </template>
+              </el-table-column>
               <el-table-column prop="created_at" label="上传时间" width="180">
                 <template #default="scope">
                   {{ formatDateTime(scope.row.created_at) }}
@@ -63,7 +68,11 @@
               </el-table-column>
               <el-table-column label="操作" width="120" fixed="right">
                 <template #default="scope">
-                  <el-button type="primary" link @click="downloadFile(scope.row)">
+                  <el-button v-if="scope.row.file_type === 'quiz'" type="warning" link @click="downloadFile(scope.row)">
+                    <el-icon><Link /></el-icon>
+                    开始答题
+                  </el-button>
+                  <el-button v-else type="primary" link @click="downloadFile(scope.row)">
                     <el-icon><Download /></el-icon>
                     下载
                   </el-button>
@@ -201,8 +210,9 @@
                 <el-table-column prop="file_name" label="文件名" min-width="200">
                   <template #default="scope">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                      <el-icon :size="20" color="#409EFF">
-                        <Document />
+                      <el-icon :size="20" :color="scope.row.file_type === 'quiz' ? '#E6A23C' : '#409EFF'">
+                        <Link v-if="scope.row.file_type === 'quiz'" />
+                        <Document v-else />
                       </el-icon>
                       <span>{{ scope.row.file_name }}</span>
                     </div>
@@ -215,7 +225,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column prop="file_size_display" label="文件大小" width="100" />
+                <el-table-column prop="file_size_display" label="文件大小" width="100">
+                  <template #default="scope">
+                    {{ scope.row.file_type === 'quiz' ? '-' : scope.row.file_size_display }}
+                  </template>
+                </el-table-column>
                 <el-table-column prop="uploaded_by_name" label="上传者" width="120" />
                 <el-table-column prop="created_at" label="上传时间" width="180">
                   <template #default="scope">
@@ -224,7 +238,11 @@
                 </el-table-column>
                 <el-table-column label="操作" :width="isInstructor ? 180 : 120" fixed="right">
                   <template #default="scope">
-                    <el-button type="primary" link @click="downloadFile(scope.row)">
+                    <el-button v-if="scope.row.file_type === 'quiz'" type="warning" link @click="downloadFile(scope.row)">
+                      <el-icon><Link /></el-icon>
+                      开始答题
+                    </el-button>
+                    <el-button v-else type="primary" link @click="downloadFile(scope.row)">
                       <el-icon><Download /></el-icon>
                       下载
                     </el-button>
@@ -257,16 +275,17 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import api from '@/api'
 import { 
   User, Clock, VideoCameraFilled, Document, Timer, 
-  ChatDotRound, VideoPlay, Select, Download, Delete, Loading 
+  ChatDotRound, VideoPlay, Select, Download, Delete, Loading, Link 
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const courseId = route.params.id
 
@@ -337,6 +356,7 @@ const getFileTypeTag = (fileType) => {
     'syllabus': 'danger',
     'material': 'primary',
     'video': 'success',
+    'quiz': 'warning',
     'other': 'info'
   }
   return tags[fileType] || 'info'
@@ -387,9 +407,15 @@ const loadCourseFiles = async () => {
 }
 
 const downloadFile = (file) => {
-  console.log('打开文件:', file)
-  if (file.file_url) {
-    // 直接在新窗口打开文件URL
+  if (file.file_type === 'quiz' && file.quiz_url) {
+    // 从quiz_url中提取share_code，使用路由跳转以保持登录状态
+    const match = file.quiz_url.match(/\/quiz\/([^/]+)\/?$/)
+    if (match) {
+      router.push(`/quiz/${match[1]}`)
+    } else {
+      window.open(file.quiz_url, '_blank')
+    }
+  } else if (file.file_url) {
     window.open(file.file_url, '_blank')
   } else {
     ElMessage.error('文件链接不可用')

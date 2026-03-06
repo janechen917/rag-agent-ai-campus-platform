@@ -9,15 +9,15 @@ PyJWT==2.8.0
 psycopg2-binary==2.9.9
 Pillow==10.2.0
 
-# AI相关（更新版本以兼容最新torch和修复弃用警告）
-langchain==0.1.20
-langchain-community==0.0.38
-langchain-openai==0.1.1
+# AI相关（更新版本以兼容最新httpx和修复proxies弃用问题）
+langchain==1.2.10
+langchain-community==0.4.1
+langchain-openai==1.1.10
 transformers==4.38.0
 torch==2.5.1
 faiss-cpu==1.8.0
 sentence-transformers==2.5.0
-openai==1.23.0
+openai==2.26.0
 
 # 工具
 redis==5.0.1

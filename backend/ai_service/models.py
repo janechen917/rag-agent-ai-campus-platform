@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -77,3 +78,76 @@ class CourseRecommendation(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.created_at}"
+
+
+class Quiz(models.Model):
+    """Quiz测验"""
+    title = models.CharField(max_length=200, verbose_name='测验标题')
+    course = models.ForeignKey('courses.Course', on_delete=models.CASCADE, related_name='quizzes',
+                               verbose_name='关联课程', null=True, blank=True)
+    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_quizzes', verbose_name='创建者')
+    source_file = models.FileField(upload_to='quizzes/sources/%Y/%m/', verbose_name='源文件(PPT)')
+    source_file_name = models.CharField(max_length=255, verbose_name='源文件名')
+    share_code = models.CharField(max_length=32, unique=True, verbose_name='分享码', default='')
+    question_count = models.IntegerField(default=5, verbose_name='题目数量')
+    end_time = models.DateTimeField(verbose_name='截止时间', null=True, blank=True)
+    is_published = models.BooleanField(default=False, verbose_name='是否已发布')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+
+    class Meta:
+        db_table = 'quizzes'
+        verbose_name = '测验'
+        verbose_name_plural = '测验'
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        if not self.share_code:
+            self.share_code = uuid.uuid4().hex[:12]
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.title
+
+
+class QuizQuestion(models.Model):
+    """Quiz题目"""
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='questions', verbose_name='测验')
+    question_text = models.TextField(verbose_name='题目内容')
+    option_a = models.CharField(max_length=500, verbose_name='选项A')
+    option_b = models.CharField(max_length=500, verbose_name='选项B')
+    option_c = models.CharField(max_length=500, verbose_name='选项C')
+    option_d = models.CharField(max_length=500, verbose_name='选项D')
+    correct_answer = models.CharField(max_length=1, verbose_name='正确答案')  # A/B/C/D
+    explanation = models.TextField(verbose_name='解析', blank=True)
+    order = models.IntegerField(default=0, verbose_name='排序')
+
+    class Meta:
+        db_table = 'quiz_questions'
+        verbose_name = '测验题目'
+        verbose_name_plural = '测验题目'
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.quiz.title} - Q{self.order}"
+
+
+class QuizSubmission(models.Model):
+    """学生Quiz提交"""
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='submissions', verbose_name='测验')
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='quiz_submissions', verbose_name='学生')
+    answers = models.JSONField(verbose_name='学生答案', default=dict)  # {question_id: "A"}
+    score = models.FloatField(default=0, verbose_name='得分')
+    total_questions = models.IntegerField(default=0, verbose_name='总题数')
+    correct_count = models.IntegerField(default=0, verbose_name='正确数')
+    submitted_at = models.DateTimeField(auto_now_add=True, verbose_name='提交时间')
+
+    class Meta:
+        db_table = 'quiz_submissions'
+        verbose_name = '测验提交'
+        verbose_name_plural = '测验提交'
+        unique_together = ['quiz', 'student']
+        ordering = ['-submitted_at']
+
+    def __str__(self):
+        return f"{self.student.username} - {self.quiz.title} - {self.score}分"

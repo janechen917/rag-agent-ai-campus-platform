@@ -150,6 +150,59 @@ class AIService:
             print("  ↳ 使用备用响应模式")
             return self._fallback_chat(message)
     
+    def chat_with_image(self, message: str, image_base64: str, content_type: str, history: List[Dict] = None) -> str:
+        """
+        AI图片问答功能
+        
+        Args:
+            message: 用户消息
+            image_base64: 图片的base64编码
+            content_type: 图片MIME类型
+            history: 对话历史
+        
+        Returns:
+            AI回复
+        """
+        if not self.llm:
+            return self._fallback_chat(message or "请描述这张图片")
+        
+        try:
+            messages_list = [
+                SystemMessage(content="""你是一位经验丰富的AI学习导师。学生可能会向你发送图片（如课件截图、代码截图、题目截图等），请根据图片内容和学生的问题提供详细的帮助。
+                你的回答应该：
+                1. 仔细分析图片中的内容
+                2. 清晰易懂地解答问题
+                3. 提供具体的建议和代码示例
+                4. 鼓励学生独立思考
+                请用中文回答问题。""")
+            ]
+            
+            if history:
+                for msg in history[-5:]:
+                    if msg.get('role') == 'user':
+                        messages_list.append(HumanMessage(content=msg['content']))
+                    elif msg.get('role') == 'assistant':
+                        messages_list.append(AIMessage(content=msg['content']))
+            
+            # Build multimodal content
+            content = []
+            if image_base64:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{content_type};base64,{image_base64}"}
+                })
+            text = message if message else "请分析这张图片的内容，并提供学习建议。"
+            content.append({"type": "text", "text": text})
+            
+            messages_list.append(HumanMessage(content=content))
+            
+            response = self.llm.invoke(messages_list)
+            return response.content
+        
+        except Exception as e:
+            print(f"⚠ AI图片问答服务调用失败: {type(e).__name__}: {e}")
+            return self._fallback_chat(message or "请描述这张图片")
+    
     def _fallback_chat(self, message: str) -> str:
         """备用聊天响应 - 当AI服务不可用时提供有用的回答"""
         message_lower = message.lower()

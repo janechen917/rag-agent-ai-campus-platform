@@ -83,15 +83,17 @@ class CourseFile(models.Model):
         ('syllabus', '课程大纲'),
         ('material', '课程资料'),
         ('video', '视频资料'),
+        ('quiz', 'Quiz'),
         ('other', '其他'),
     ]
     
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='files', verbose_name='课程')
-    file = models.FileField(upload_to='courses/files/%Y/%m/', verbose_name='文件')
+    file = models.FileField(upload_to='courses/files/%Y/%m/', verbose_name='文件', blank=True, null=True)
     file_name = models.CharField(max_length=255, verbose_name='文件名')
     file_type = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES, default='other', verbose_name='文件类型')
     file_size = models.BigIntegerField(default=0, verbose_name='文件大小(字节)')
     description = models.TextField(blank=True, null=True, verbose_name='文件描述')
+    quiz_url = models.URLField(max_length=500, blank=True, null=True, verbose_name='Quiz链接')
     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name='上传者')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='上传时间')
     

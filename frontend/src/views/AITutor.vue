@@ -30,6 +30,13 @@
           </div>
           <div class="content">
             <div class="name">{{ message.role === 'user' ? '你' : 'AI导师' }}</div>
+            <div v-if="message.imageUrl" class="message-image">
+              <el-image :src="message.imageUrl" fit="contain" :preview-src-list="[message.imageUrl]" style="max-width: 280px; max-height: 200px; border-radius: 8px; margin-bottom: 8px;" />
+            </div>
+            <div v-if="message.fileName" class="message-file-tag">
+              <el-icon><Document /></el-icon>
+              <span>{{ message.fileName }}</span>
+            </div>
             <div class="text" v-html="formatMessage(message.content)"></div>
             <div class="time">{{ formatTime(message.timestamp) }}</div>
           </div>
@@ -66,10 +73,16 @@
           </el-tag>
         </div>
         
+        <div v-if="uploadedFileInfo" class="image-attachment-bar">
+          <el-image v-if="uploadedFileInfo.isImage" :src="uploadedImagePreview" fit="cover" style="width: 48px; height: 48px; border-radius: 6px;" />
+          <el-icon v-else :size="32" color="#409EFF"><Document /></el-icon>
+          <span class="attachment-text">{{ uploadedFileInfo.isImage ? '图片' : uploadedFileInfo.name }} 已附加，发送后将一起提交</span>
+          <el-button type="danger" :icon="Close" circle size="small" @click="removeImage" />
+        </div>
         <div class="input-row">
           <el-input
             v-model="inputMessage"
-            :placeholder="messages.length === 0 ? '试试问我一个学习问题...' : '输入你的问题...'"
+            :placeholder="uploadedFileInfo ? '请输入关于文件的问题...' : (messages.length === 0 ? '试试问我一个学习问题...' : '输入你的问题...')"
             @keyup.enter="handleSend"
             :disabled="isLoading"
             type="textarea"
@@ -88,51 +101,279 @@
       </div>
     </el-card>
 
-    <!-- 侧边栏 - 相关课程推荐 -->
+    <!-- 侧边栏 - Quiz生成与管理 -->
     <el-card class="sidebar">
       <template #header>
         <div class="sidebar-header">
-          <el-icon><MagicStick /></el-icon>
-          <span>相关课程推荐</span>
+          <el-icon><Upload /></el-icon>
+          <span>{{ isTeacher ? '文件上传 & Quiz生成' : '文件上传 & 历史消息' }}</span>
         </div>
       </template>
-      
-      <div v-if="recommendedCourses.length > 0">
-        <div
-          v-for="course in recommendedCourses"
-          :key="course.id"
-          class="recommended-course"
-          @click="router.push(`/course/${course.id}`)"
+
+      <!-- 教师端：上传PPT生成Quiz -->
+      <div v-if="isTeacher" class="quiz-upload-section">
+        <el-upload
+          ref="uploadRef"
+          :auto-upload="false"
+          :limit="1"
+          accept=".ppt,.pptx,.pdf,.doc,.docx,.txt"
+          :on-change="handleFileChange"
+          :on-remove="handleFileRemove"
+          drag
+          class="upload-area"
         >
-          <h4>{{ course.title }}</h4>
-          <p>{{ course.description }}</p>
-          <el-tag size="small" :type="getCategoryType(course.category)">
-            {{ getCategoryLabel(course.category) }}
-          </el-tag>
+          <el-icon class="el-icon--upload"><Upload /></el-icon>
+          <div class="el-upload__text">拖拽文件到此处，或<em>点击上传</em></div>
+          <template #tip>
+            <div class="el-upload__tip">支持 PPT / PDF / Word / TXT 文件，最大100MB</div>
+          </template>
+        </el-upload>
+
+        <el-form v-if="selectedFile" class="quiz-settings" label-position="top" size="small">
+          <el-form-item label="Quiz标题">
+            <el-input v-model="quizForm.title" placeholder="输入Quiz标题" />
+          </el-form-item>
+          <el-form-item label="题目数量">
+            <el-input-number v-model="quizForm.questionCount" :min="1" :max="30" />
+          </el-form-item>
+          <el-form-item label="截止时间">
+            <el-date-picker
+              v-model="quizForm.endTime"
+              type="datetime"
+              placeholder="选择截止时间"
+              style="width: 100%"
+              :disabled-date="(date) => date < new Date()"
+            />
+          </el-form-item>
+          <el-form-item label="关联课程（可选）">
+            <el-select v-model="quizForm.courseId" placeholder="选择课程" clearable style="width: 100%">
+              <el-option
+                v-for="course in myCourses"
+                :key="course.id"
+                :label="course.title"
+                :value="course.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-button
+            type="primary"
+            @click="generateQuiz"
+            :loading="isGenerating"
+            :disabled="!selectedFile"
+            style="width: 100%"
+          >
+            {{ isGenerating ? 'AI生成中...' : '生成Quiz' }}
+          </el-button>
+        </el-form>
+
+        <el-divider>我的Quiz</el-divider>
+
+        <div v-if="myQuizzes.length > 0" class="quiz-list">
+          <div v-for="quiz in myQuizzes" :key="quiz.id" class="quiz-item">
+            <div class="quiz-item-header">
+              <h4>{{ quiz.title }}</h4>
+              <el-tag :type="quiz.is_published ? 'success' : 'info'" size="small">
+                {{ quiz.is_published ? '已发布' : '未发布' }}
+              </el-tag>
+            </div>
+            <div class="quiz-item-info">
+              <span>{{ quiz.question_count }}题</span>
+              <span v-if="quiz.end_time">截止: {{ formatDateTime(quiz.end_time) }}</span>
+              <span>{{ quiz.submission_count || 0 }}人提交</span>
+            </div>
+            <div class="quiz-item-actions">
+              <el-button v-if="!quiz.is_published" type="primary" size="small" @click="showPublishDialog(quiz)">发布</el-button>
+              <el-button size="small" @click="copyShareLink(quiz)" :disabled="!quiz.is_published">复制链接</el-button>
+              <el-button size="small" @click="viewQuizDetail(quiz)">详情</el-button>
+              <el-button size="small" type="danger" @click="deleteQuiz(quiz)">删除</el-button>
+            </div>
+          </div>
+        </div>
+        <el-empty v-else description="暂无Quiz" :image-size="60" />
+      </div>
+
+      <!-- 学生端：上传文件 & 历史消息 -->
+      <div v-else class="student-upload-section">
+        <div class="image-upload-area">
+          <el-upload
+            ref="imageUploadRef"
+            :auto-upload="false"
+            :limit="1"
+            accept="image/*,.pdf,.ppt,.pptx,.doc,.docx,.txt"
+            :on-change="handleImageChange"
+            :on-remove="handleImageRemove"
+            :show-file-list="false"
+            class="image-upload"
+          >
+            <div v-if="!uploadedFileInfo" class="upload-trigger">
+              <el-icon :size="40" color="#909399"><Upload /></el-icon>
+              <div class="upload-trigger-text">点击或拖拽上传文件</div>
+              <div class="upload-trigger-tip">支持图片 / PDF / PPT / Word / TXT，最大100MB</div>
+            </div>
+          </el-upload>
+
+          <div v-if="uploadedFileInfo && uploadedFileInfo.isImage" class="image-preview-box">
+            <el-image :src="uploadedImagePreview" fit="contain" class="preview-img" :preview-src-list="[uploadedImagePreview]" />
+            <el-button type="danger" size="small" @click="removeImage" style="margin-top: 8px; width: 100%">
+              <el-icon><Close /></el-icon> 移除文件
+            </el-button>
+          </div>
+
+          <div v-if="uploadedFileInfo && !uploadedFileInfo.isImage" class="file-preview-box">
+            <div class="file-icon-row">
+              <el-icon :size="36" color="#409EFF"><Document /></el-icon>
+              <div class="file-meta">
+                <div class="file-name">{{ uploadedFileInfo.name }}</div>
+                <div class="file-size">{{ uploadedFileInfo.sizeText }}</div>
+              </div>
+            </div>
+            <el-button type="danger" size="small" @click="removeImage" style="margin-top: 8px; width: 100%">
+              <el-icon><Close /></el-icon> 移除文件
+            </el-button>
+          </div>
+
+          <p v-if="uploadedFileInfo" class="upload-hint">
+            文件已就绪，请在左侧输入问题后发送
+          </p>
+        </div>
+
+        <el-divider>历史消息</el-divider>
+
+        <div class="chat-history-list">
+          <div v-if="chatHistory.length > 0">
+            <div
+              v-for="conv in chatHistory"
+              :key="conv.id"
+              class="history-item"
+              @click="loadConversation(conv)"
+            >
+              <div class="history-title">{{ conv.title }}</div>
+              <div class="history-meta">
+                <span>{{ conv.messages_count || 0 }}条消息</span>
+                <span>{{ formatDateTime(conv.updated_at || conv.created_at) }}</span>
+              </div>
+            </div>
+          </div>
+          <el-empty v-else description="暂无历史消息" :image-size="60" />
         </div>
       </div>
-      <el-empty v-else description="暂无推荐课程" :image-size="80" />
     </el-card>
+
+    <!-- Quiz详情对话框（教师端） -->
+    <el-dialog v-model="quizDetailVisible" title="Quiz详情" width="700px" top="5vh">
+      <div v-if="currentQuizDetail">
+        <div class="quiz-detail-header">
+          <h3>{{ currentQuizDetail.title }}</h3>
+          <div>
+            <el-tag>{{ currentQuizDetail.question_count }}题</el-tag>
+            <el-tag v-if="currentQuizDetail.is_published" type="success" style="margin-left:8px">已发布</el-tag>
+            <el-tag v-if="currentQuizDetail.course_title" type="info" style="margin-left:8px">{{ currentQuizDetail.course_title }}</el-tag>
+          </div>
+          <p v-if="currentQuizDetail.share_code && currentQuizDetail.is_published" class="share-info">
+            分享码: <el-tag>{{ currentQuizDetail.share_code }}</el-tag>
+            <el-button size="small" text @click="copyShareLink(currentQuizDetail)">复制链接</el-button>
+          </p>
+        </div>
+        <el-divider />
+        <div v-for="(q, idx) in currentQuizDetail.questions" :key="q.id" class="quiz-question-preview">
+          <p class="question-title">{{ idx + 1 }}. {{ q.question_text }}</p>
+          <div class="question-options">
+            <p :class="{ correct: q.correct_answer === 'A' }">A. {{ q.option_a }}</p>
+            <p :class="{ correct: q.correct_answer === 'B' }">B. {{ q.option_b }}</p>
+            <p :class="{ correct: q.correct_answer === 'C' }">C. {{ q.option_c }}</p>
+            <p :class="{ correct: q.correct_answer === 'D' }">D. {{ q.option_d }}</p>
+          </div>
+          <p class="explanation" v-if="q.explanation">解析: {{ q.explanation }}</p>
+        </div>
+        <el-divider>提交记录 ({{ quizSubmissions.length }}人)</el-divider>
+        <el-table v-if="quizSubmissions.length > 0" :data="quizSubmissions" size="small" stripe>
+          <el-table-column prop="student_name" label="学生" />
+          <el-table-column label="得分"><template #default="{ row }">{{ row.score }}分</template></el-table-column>
+          <el-table-column label="正确数"><template #default="{ row }">{{ row.correct_count }}/{{ row.total_questions }}</template></el-table-column>
+          <el-table-column label="提交时间"><template #default="{ row }">{{ formatDateTime(row.submitted_at) }}</template></el-table-column>
+        </el-table>
+        <el-empty v-else description="暂无提交" :image-size="40" />
+      </div>
+    </el-dialog>
+
+    <!-- 发布Quiz对话框 -->
+    <el-dialog v-model="publishDialogVisible" title="发布Quiz" width="400px">
+      <el-form label-position="top">
+        <el-form-item label="选择发布到的课程">
+          <el-select v-model="publishCourseId" placeholder="选择课程" clearable style="width:100%">
+            <el-option v-for="course in myCourses" :key="course.id" :label="course.title" :value="course.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="publishDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmPublish" :loading="isPublishing">发布</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 学生答题对话框 -->
+    <el-dialog v-model="quizTakingVisible" :title="currentTakingQuiz?.title || 'Quiz'" width="700px" top="5vh" :close-on-click-modal="false">
+      <div v-if="currentTakingQuiz && !quizResult">
+        <div v-for="(q, idx) in currentTakingQuiz.questions" :key="q.id" class="quiz-taking-question">
+          <p class="question-title">{{ idx + 1 }}. {{ q.question_text }}</p>
+          <el-radio-group v-model="studentAnswers[q.id]">
+            <el-radio label="A" style="display:block;margin:6px 0">A. {{ q.option_a }}</el-radio>
+            <el-radio label="B" style="display:block;margin:6px 0">B. {{ q.option_b }}</el-radio>
+            <el-radio label="C" style="display:block;margin:6px 0">C. {{ q.option_c }}</el-radio>
+            <el-radio label="D" style="display:block;margin:6px 0">D. {{ q.option_d }}</el-radio>
+          </el-radio-group>
+        </div>
+      </div>
+      <div v-if="quizResult" class="quiz-result">
+        <div class="result-score">
+          <el-result :icon="quizResult.score >= 60 ? 'success' : 'warning'" :title="`得分: ${quizResult.score}分`" :sub-title="`正确 ${quizResult.correct_count}/${quizResult.total_questions} 题`" />
+        </div>
+        <el-divider />
+        <div v-for="(q, idx) in quizResult.questions" :key="q.id" class="quiz-result-question">
+          <p class="question-title">
+            {{ idx + 1 }}. {{ q.question_text }}
+            <el-icon v-if="q.is_correct" color="#67C23A"><CircleCheck /></el-icon>
+            <el-icon v-else color="#F56C6C"><CircleClose /></el-icon>
+          </p>
+          <div class="question-options">
+            <p :class="{ correct: q.correct_answer === 'A', wrong: q.your_answer === 'A' && !q.is_correct && q.correct_answer !== 'A' }">A. {{ q.option_a }}</p>
+            <p :class="{ correct: q.correct_answer === 'B', wrong: q.your_answer === 'B' && !q.is_correct && q.correct_answer !== 'B' }">B. {{ q.option_b }}</p>
+            <p :class="{ correct: q.correct_answer === 'C', wrong: q.your_answer === 'C' && !q.is_correct && q.correct_answer !== 'C' }">C. {{ q.option_c }}</p>
+            <p :class="{ correct: q.correct_answer === 'D', wrong: q.your_answer === 'D' && !q.is_correct && q.correct_answer !== 'D' }">D. {{ q.option_d }}</p>
+          </div>
+          <p class="explanation" v-if="q.explanation">解析: {{ q.explanation }}</p>
+        </div>
+      </div>
+      <template #footer>
+        <template v-if="!quizResult">
+          <el-button @click="quizTakingVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitQuiz" :loading="isSubmitting">提交答案</el-button>
+        </template>
+        <template v-else>
+          <el-button @click="quizTakingVisible = false; quizResult = null">关闭</el-button>
+        </template>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { Delete, Promotion, Cpu, MagicStick, Back } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { Delete, Promotion, Cpu, Back, Upload, CircleCheck, CircleClose, Picture, Close, Document } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
 import api from '@/api'
 
 const router = useRouter()
 const userStore = useUserStore()
 
+// --- Chat state ---
 const messages = ref([])
 const inputMessage = ref('')
 const isLoading = ref(false)
 const messagesContainer = ref(null)
-const recommendedCourses = ref([])
 
 const suggestions = ref([
   'Python中的列表和元组有什么区别？',
@@ -141,20 +382,61 @@ const suggestions = ref([
   '什么是RESTful API？'
 ])
 
-const formatMessage = (content) => {
-  return marked(content)
-}
+// --- File upload state (Student) ---
+const uploadedImageFile = ref(null)
+const uploadedImagePreview = ref(null)
+const uploadedFileInfo = ref(null)
+const imageUploadRef = ref(null)
+const chatHistory = ref([])
+
+// --- Quiz state ---
+const isTeacher = computed(() => userStore.user?.user_type === 'teacher')
+const selectedFile = ref(null)
+const uploadRef = ref(null)
+const isGenerating = ref(false)
+const myQuizzes = ref([])
+const myCourses = ref([])
+const availableQuizzes = ref([])
+const shareCodeInput = ref('')
+
+const quizForm = reactive({
+  title: '',
+  questionCount: 5,
+  endTime: null,
+  courseId: null,
+})
+
+const quizDetailVisible = ref(false)
+const currentQuizDetail = ref(null)
+const quizSubmissions = ref([])
+
+const publishDialogVisible = ref(false)
+const publishCourseId = ref(null)
+const publishingQuiz = ref(null)
+const isPublishing = ref(false)
+
+const quizTakingVisible = ref(false)
+const currentTakingQuiz = ref(null)
+const studentAnswers = ref({})
+const isSubmitting = ref(false)
+const quizResult = ref(null)
+
+// --- Chat methods ---
+const formatMessage = (content) => marked(content)
 
 const formatTime = (timestamp) => {
   const date = new Date(timestamp)
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
+const formatDateTime = (dt) => {
+  if (!dt) return ''
+  return new Date(dt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 const scrollToBottom = () => {
   nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
+    if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
   })
 }
 
@@ -164,79 +446,56 @@ const handleSend = () => {
 }
 
 const sendMessage = async (message) => {
-  const userMessage = {
+  const hasFile = !!uploadedImageFile.value
+  const fileInfo = uploadedFileInfo.value
+  const imagePreviewUrl = uploadedImagePreview.value
+
+  messages.value.push({
     role: 'user',
     content: message,
-    timestamp: Date.now()
-  }
-  
-  messages.value.push(userMessage)
+    timestamp: Date.now(),
+    imageUrl: (fileInfo?.isImage ? imagePreviewUrl : null),
+    fileName: (fileInfo && !fileInfo.isImage) ? fileInfo.name : null
+  })
   inputMessage.value = ''
   isLoading.value = true
-  
   scrollToBottom()
 
   try {
-    // 调用AI API
-    const response = await api.post('/api/ai/chat/', {
-      message: message,
-      history: messages.value.slice(-10) // 发送最近10条消息作为上下文
-    })
-
-    const aiMessage = {
-      role: 'assistant',
-      content: response.data.response,
-      timestamp: Date.now()
+    let response
+    if (hasFile) {
+      const formData = new FormData()
+      formData.append('message', message)
+      formData.append('file', uploadedImageFile.value)
+      formData.append('history', JSON.stringify(messages.value.slice(-10).map(m => ({ role: m.role, content: m.content }))))
+      response = await api.post('/api/ai/chat-with-file/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,
+      })
+      // Clear file after sending
+      uploadedImageFile.value = null
+      uploadedImagePreview.value = null
+      uploadedFileInfo.value = null
+      if (imageUploadRef.value) imageUploadRef.value.clearFiles()
+    } else {
+      response = await api.post('/api/ai/chat/', {
+        message,
+        history: messages.value.slice(-10)
+      })
     }
-    
-    messages.value.push(aiMessage)
-    
-    // 获取相关课程推荐
-    if (response.data.recommended_courses) {
-      recommendedCourses.value = response.data.recommended_courses
-    }
+    messages.value.push({ role: 'assistant', content: response.data.response, timestamp: Date.now() })
   } catch (error) {
     console.error('AI chat error:', error)
-    
     let errorContent = '抱歉，出现了一些问题。'
-    
-    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-      errorContent = `抱歉，AI思考时间过长导致超时。这可能是因为：
-      
-- GitHub Models API响应较慢
-- 网络连接不稳定
-
-**建议：** 请稍等片刻后重试，或尝试简化您的问题。`
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      errorContent = '抱歉，AI思考时间过长导致超时。请稍后重试。'
     } else if (error.response) {
-      // 服务器返回错误响应
-      switch (error.response.status) {
-        case 500:
-          errorContent = '抱歉，服务器遇到了问题。AI服务可能暂时不可用，请稍后重试。'
-          break
-        case 401:
-          errorContent = '您的登录已过期，请重新登录后再试。'
-          break
-        default:
-          errorContent = `抱歉，服务器返回错误 (${error.response.status})。请稍后重试。`
-      }
-    } else if (error.request) {
-      // 请求已发送但没有收到响应
-      errorContent = `网络连接出现问题，无法连接到服务器。请检查：
-
-- 网络连接是否正常
-- 后端服务是否正在运行
-- 防火墙是否阻止了连接`
+      errorContent = error.response.status === 401
+        ? '您的登录已过期，请重新登录。'
+        : `服务器返回错误 (${error.response.status})，请稍后重试。`
     }
-    
-    // 添加错误提示消息
-    const errorMessage = {
-      role: 'assistant',
-      content: errorContent,
-      timestamp: Date.now()
-    }
-    messages.value.push(errorMessage)
-    
-    ElMessage.warning('AI响应失败，请查看详情')
+    messages.value.push({ role: 'assistant', content: errorContent, timestamp: Date.now() })
+    ElMessage.warning('AI响应失败')
   } finally {
     isLoading.value = false
     scrollToBottom()
@@ -245,38 +504,243 @@ const sendMessage = async (message) => {
 
 const clearChat = () => {
   messages.value = []
-  recommendedCourses.value = []
   ElMessage.success('对话已清空')
 }
 
 const goBack = () => {
-  // 根据用户类型返回相应的首页
-  const userType = userStore.user?.user_type
-  if (userType === 'teacher') {
-    router.push('/teacher-home')
+  router.push(userStore.user?.user_type === 'teacher' ? '/teacher-home' : '/student-home')
+}
+
+// --- File upload methods (Student) ---
+const allowedTypes = ['image/', '.pdf', '.ppt', '.pptx', '.doc', '.docx', '.txt']
+const formatFileSize = (bytes) => {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+}
+
+const handleImageChange = (file) => {
+  const isImage = file.raw.type.startsWith('image/')
+  const ext = ('.' + file.name.split('.').pop()).toLowerCase()
+  const allowedExts = ['.pdf', '.ppt', '.pptx', '.doc', '.docx', '.txt']
+  if (!isImage && !allowedExts.includes(ext)) {
+    ElMessage.error('仅支持图片 / PDF / PPT / Word / TXT 文件')
+    return false
+  }
+  const isLt100M = file.raw.size / 1024 / 1024 < 100
+  if (!isLt100M) {
+    ElMessage.error('文件大小不能超过 100MB')
+    return false
+  }
+  uploadedImageFile.value = file.raw
+  uploadedFileInfo.value = {
+    name: file.name,
+    size: file.raw.size,
+    sizeText: formatFileSize(file.raw.size),
+    isImage,
+  }
+  if (isImage) {
+    uploadedImagePreview.value = URL.createObjectURL(file.raw)
   } else {
-    router.push('/student-home')
+    uploadedImagePreview.value = null
   }
 }
 
-const getCategoryType = (category) => {
-  const types = {
-    'required': 'danger',
-    'elective': 'success'
-  }
-  return types[category] || 'info'
+const handleImageRemove = () => {
+  removeImage()
 }
 
-const getCategoryLabel = (category) => {
-  const labels = {
-    'required': '必修',
-    'elective': '选修'
+const removeImage = () => {
+  if (uploadedImagePreview.value) {
+    URL.revokeObjectURL(uploadedImagePreview.value)
   }
-  return labels[category] || category
+  uploadedImageFile.value = null
+  uploadedImagePreview.value = null
+  uploadedFileInfo.value = null
+  if (imageUploadRef.value) imageUploadRef.value.clearFiles()
+}
+
+const loadChatHistory = async () => {
+  try {
+    const res = await api.get('/api/ai/conversations/')
+    chatHistory.value = res.data.results || res.data || []
+  } catch (e) { console.error(e) }
+}
+
+const loadConversation = async (conv) => {
+  try {
+    const res = await api.get(`/api/ai/conversations/${conv.id}/`)
+    const convData = res.data
+    messages.value = (convData.messages || []).map(m => ({
+      role: m.role,
+      content: m.content,
+      timestamp: new Date(m.created_at).getTime()
+    }))
+    scrollToBottom()
+  } catch (e) { ElMessage.error('加载对话失败') }
+}
+
+// --- Quiz methods (Teacher) ---
+const handleFileChange = (file) => {
+  selectedFile.value = file.raw
+  if (!quizForm.title) quizForm.title = file.name.replace(/\.(pptx?|pdf|docx?|txt)$/i, '')
+}
+
+const handleFileRemove = () => { selectedFile.value = null }
+
+const generateQuiz = async () => {
+  if (!selectedFile.value) { ElMessage.warning('请先上传文件'); return }
+
+  isGenerating.value = true
+  const formData = new FormData()
+  formData.append('file', selectedFile.value)
+  formData.append('title', quizForm.title || 'Quiz')
+  formData.append('question_count', quizForm.questionCount)
+  if (quizForm.endTime) formData.append('end_time', new Date(quizForm.endTime).toISOString())
+  if (quizForm.courseId) formData.append('course_id', quizForm.courseId)
+
+  try {
+    const response = await api.post('/api/ai/quiz/generate/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    })
+    ElMessage.success('Quiz生成成功！')
+    selectedFile.value = null
+    Object.assign(quizForm, { title: '', questionCount: 5, endTime: null, courseId: null })
+    if (uploadRef.value) uploadRef.value.clearFiles()
+    loadMyQuizzes()
+    currentQuizDetail.value = response.data
+    quizDetailVisible.value = true
+  } catch (error) {
+    ElMessage.error(error.response?.data?.error || 'Quiz生成失败，请重试')
+  } finally {
+    isGenerating.value = false
+  }
+}
+
+const loadMyQuizzes = async () => {
+  try { myQuizzes.value = (await api.get('/api/ai/quiz/my/')).data } catch (e) { console.error(e) }
+}
+
+const loadMyCourses = async () => {
+  try {
+    const res = await api.get('/api/courses/course/my_courses/')
+    myCourses.value = res.data.results || res.data || []
+  } catch (e) { console.error(e) }
+}
+
+const viewQuizDetail = async (quiz) => {
+  try {
+    const [detailRes, subsRes] = await Promise.all([
+      api.get(`/api/ai/quiz/${quiz.id}/`),
+      api.get(`/api/ai/quiz/${quiz.id}/submissions/`)
+    ])
+    currentQuizDetail.value = detailRes.data
+    quizSubmissions.value = subsRes.data
+    quizDetailVisible.value = true
+  } catch (e) { ElMessage.error('获取Quiz详情失败') }
+}
+
+const showPublishDialog = (quiz) => {
+  publishingQuiz.value = quiz
+  publishCourseId.value = quiz.course || null
+  publishDialogVisible.value = true
+}
+
+const confirmPublish = async () => {
+  if (!publishingQuiz.value) return
+  isPublishing.value = true
+  try {
+    await api.post(`/api/ai/quiz/${publishingQuiz.value.id}/publish/`, { course_id: publishCourseId.value })
+    ElMessage.success('Quiz发布成功！')
+    publishDialogVisible.value = false
+    loadMyQuizzes()
+  } catch (e) { ElMessage.error(e.response?.data?.error || '发布失败') }
+  finally { isPublishing.value = false }
+}
+
+const copyShareLink = (quiz) => {
+  const link = `${window.location.origin}/quiz/${quiz.share_code}`
+  navigator.clipboard.writeText(link).then(() => {
+    ElMessage.success(`链接已复制: ${link}`)
+  }).catch(() => {
+    ElMessage({ message: `分享链接: ${link}`, type: 'info', duration: 5000 })
+  })
+}
+
+const deleteQuiz = async (quiz) => {
+  try {
+    await ElMessageBox.confirm('确定要删除此Quiz吗？', '确认删除', { type: 'warning' })
+    await api.delete(`/api/ai/quiz/${quiz.id}/delete/`)
+    ElMessage.success('已删除')
+    loadMyQuizzes()
+  } catch (e) { if (e !== 'cancel') ElMessage.error('删除失败') }
+}
+
+// --- Quiz methods (Student) ---
+const joinQuizByCode = async () => {
+  const code = shareCodeInput.value.trim()
+  if (!code) { ElMessage.warning('请输入分享码'); return }
+  try {
+    const response = await api.get(`/api/ai/quiz/share/${code}/`)
+    currentTakingQuiz.value = response.data
+    studentAnswers.value = {}
+    quizResult.value = null
+    quizTakingVisible.value = true
+    shareCodeInput.value = ''
+  } catch (e) { ElMessage.error(e.response?.data?.error || 'Quiz不存在或已截止') }
+}
+
+const loadAvailableQuizzes = async () => {
+  try {
+    const enrollRes = await api.get('/api/courses/course-enrollments/')
+    const courses = enrollRes.data.results || enrollRes.data || []
+    const allQuizzes = []
+    for (const enrollment of courses) {
+      const courseId = enrollment.course?.id || enrollment.course
+      if (!courseId) continue
+      try {
+        const qRes = await api.get(`/api/ai/quiz/course/${courseId}/`)
+        allQuizzes.push(...qRes.data)
+      } catch (e) { /* no quizzes */ }
+    }
+    availableQuizzes.value = allQuizzes
+  } catch (e) { console.error(e) }
+}
+
+const startQuiz = async (quiz) => {
+  try {
+    const response = await api.get(`/api/ai/quiz/${quiz.id}/`)
+    currentTakingQuiz.value = response.data
+    studentAnswers.value = {}
+    quizResult.value = null
+    quizTakingVisible.value = true
+  } catch (e) { ElMessage.error(e.response?.data?.error || '无法加载Quiz') }
+}
+
+const submitQuiz = async () => {
+  if (!currentTakingQuiz.value) return
+  const totalQ = currentTakingQuiz.value.questions?.length || 0
+  const answeredQ = Object.keys(studentAnswers.value).length
+  if (answeredQ < totalQ) {
+    try {
+      await ElMessageBox.confirm(`您还有 ${totalQ - answeredQ} 题未作答，确定提交吗？`, '提示', { type: 'warning' })
+    } catch { return }
+  }
+
+  isSubmitting.value = true
+  try {
+    const response = await api.post(`/api/ai/quiz/${currentTakingQuiz.value.id}/submit/`, { answers: studentAnswers.value })
+    quizResult.value = response.data
+    ElMessage.success(`提交成功！得分: ${response.data.score}分`)
+    if (!isTeacher.value) loadAvailableQuizzes()
+  } catch (e) { ElMessage.error(e.response?.data?.error || '提交失败') }
+  finally { isSubmitting.value = false }
 }
 
 onMounted(() => {
-  // 加载历史对话（如果需要）
+  if (isTeacher.value) { loadMyQuizzes(); loadMyCourses() }
+  else { loadChatHistory() }
 })
 </script>
 
@@ -473,7 +937,7 @@ onMounted(() => {
 }
 
 .sidebar {
-  width: 320px;
+  width: 380px;
   height: 100%;
   overflow-y: auto;
 }
@@ -485,31 +949,190 @@ onMounted(() => {
   font-weight: bold;
 }
 
-.recommended-course {
-  padding: 15px;
-  border-bottom: 1px solid #EBEEF5;
+.upload-area { width: 100%; }
+.upload-area :deep(.el-upload-dragger) { padding: 20px; }
+.quiz-settings { margin-top: 16px; }
+
+.quiz-list { max-height: 400px; overflow-y: auto; }
+
+.quiz-item {
+  padding: 12px;
+  border: 1px solid #EBEEF5;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  transition: box-shadow 0.3s;
+}
+.quiz-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+.quiz-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.quiz-item-header h4 { margin: 0; font-size: 14px; color: #303133; }
+
+.quiz-item-info {
+  display: flex; gap: 10px;
+  font-size: 12px; color: #909399;
+  flex-wrap: wrap;
+}
+
+.quiz-item-actions {
+  display: flex; gap: 6px;
+  margin-top: 8px; flex-wrap: wrap;
+}
+
+.share-code-input { margin-bottom: 12px; }
+
+.quiz-detail-header h3 { margin: 0 0 8px 0; }
+.share-info { margin-top: 8px; font-size: 13px; color: #606266; }
+
+.quiz-question-preview,
+.quiz-taking-question,
+.quiz-result-question {
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #f9f9fb;
+  border-radius: 8px;
+}
+
+.question-title { font-weight: bold; margin-bottom: 8px; font-size: 14px; }
+.question-options p {
+  margin: 4px 0; padding: 4px 8px;
+  border-radius: 4px; font-size: 13px;
+}
+.question-options p.correct { background: #f0f9eb; color: #67C23A; font-weight: bold; }
+.question-options p.wrong { background: #fef0f0; color: #F56C6C; text-decoration: line-through; }
+
+.explanation { margin-top: 8px; font-size: 12px; color: #909399; font-style: italic; }
+.result-score { text-align: center; }
+
+/* Student image upload section */
+.student-upload-section { padding: 4px 0; }
+
+.image-upload-area { text-align: center; }
+
+.image-upload { width: 100%; }
+.image-upload :deep(.el-upload) { width: 100%; }
+
+.upload-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 20px;
+  border: 2px dashed #dcdfe6;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background 0.3s;
+  transition: border-color 0.3s;
+}
+.upload-trigger:hover { border-color: #409EFF; }
+.upload-trigger-text { margin-top: 10px; font-size: 14px; color: #606266; }
+.upload-trigger-tip { margin-top: 4px; font-size: 12px; color: #909399; }
+
+.image-preview-box {
+  margin-top: 12px;
+  text-align: center;
+}
+.preview-img {
+  max-height: 200px;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
 }
 
-.recommended-course:hover {
-  background: #f5f7fa;
+.upload-hint {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #67C23A;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
 }
 
-.recommended-course:last-child {
-  border-bottom: none;
-}
+.chat-history-list { max-height: 300px; overflow-y: auto; }
 
-.recommended-course h4 {
-  margin: 0 0 8px 0;
-  color: #303133;
+.history-item {
+  padding: 10px 12px;
+  border: 1px solid #EBEEF5;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.history-item:hover {
+  background: #f0f7ff;
+  border-color: #409EFF;
+}
+.history-title {
   font-size: 14px;
+  color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.history-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
 }
 
-.recommended-course p {
-  margin: 0 0 8px 0;
-  color: #606266;
-  font-size: 12px;
-  line-height: 1.5;
+.image-attachment-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: #f0f7ff;
+  border-radius: 8px;
+  border: 1px solid #d9ecff;
 }
+.attachment-text {
+  flex: 1;
+  font-size: 13px;
+  color: #409EFF;
+}
+
+.message-image {
+  margin-bottom: 4px;
+}
+
+.message-file-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #f0f7ff;
+  border: 1px solid #d9ecff;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #409EFF;
+  margin-bottom: 6px;
+}
+
+.file-preview-box {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: #fafafa;
+}
+.file-icon-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.file-meta { flex: 1; overflow: hidden; }
+.file-name {
+  font-size: 14px;
+  color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-size { font-size: 12px; color: #909399; margin-top: 2px; }
 </style>

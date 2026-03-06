@@ -129,7 +129,10 @@
                     class="file-card"
                   >
                     <div class="file-icon">
-                      <el-icon :size="24"><Document /></el-icon>
+                      <el-icon :size="24" :color="file.file_type === 'quiz' ? '#E6A23C' : ''">
+                        <Link v-if="file.file_type === 'quiz'" />
+                        <Document v-else />
+                      </el-icon>
                     </div>
                     <div class="file-info">
                       <div class="file-name" :title="file.file_name">{{ file.file_name }}</div>
@@ -137,7 +140,7 @@
                         <el-tag :type="getFileTypeTag(file.file_type)" size="small">
                           {{ file.file_type_display }}
                         </el-tag>
-                        <span class="file-size">{{ file.file_size_display }}</span>
+                        <span v-if="file.file_type !== 'quiz'" class="file-size">{{ file.file_size_display }}</span>
                       </div>
                       <div class="file-time">{{ formatTime(file.created_at) }}</div>
                     </div>
@@ -213,9 +216,21 @@
             <el-option label="课程大纲" value="syllabus" />
             <el-option label="课程资料" value="material" />
             <el-option label="视频资料" value="video" />
+            <el-option label="Quiz" value="quiz" />
             <el-option label="其他" value="other" />
           </el-select>
         </el-form-item>
+
+        <!-- Quiz类型：输入链接 -->
+        <template v-if="uploadForm.file_type === 'quiz'">
+          <el-form-item label="Quiz名称">
+            <el-input v-model="uploadForm.quiz_name" placeholder="输入Quiz名称" />
+          </el-form-item>
+          <el-form-item label="Quiz链接">
+            <el-input v-model="uploadForm.quiz_url" placeholder="粘贴AI助手生成的Quiz分享链接" />
+          </el-form-item>
+        </template>
+
         <el-form-item label="文件描述">
           <el-input
             v-model="uploadForm.description"
@@ -224,7 +239,9 @@
             placeholder="选填：简单描述文件内容（多个文件将共享此描述）"
           />
         </el-form-item>
-        <el-form-item label="选择文件">
+
+        <!-- 非Quiz类型：文件上传 -->
+        <el-form-item v-if="uploadForm.file_type !== 'quiz'" label="选择文件">
           <el-upload
             ref="uploadRef"
             :action="`/api/courses/course/${currentCourse?.id}/upload_file/`"
@@ -251,7 +268,9 @@
       </el-form>
       <template #footer>
         <el-button @click="uploadDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitUpload" :loading="uploading">确定上传</el-button>
+        <el-button type="primary" @click="submitUpload" :loading="uploading">
+          {{ uploadForm.file_type === 'quiz' ? '添加Quiz' : '确定上传' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -264,7 +283,7 @@ import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 import {
-  Plus, User, Clock, Star, Folder, Document, Files, View, Edit, Delete, Upload, Download, Message
+  Plus, User, Clock, Star, Folder, Document, Files, View, Edit, Delete, Upload, Download, Message, Link
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -277,7 +296,9 @@ const uploadRef = ref(null)
 const uploading = ref(false)
 const uploadForm = ref({
   file_type: 'material',
-  description: ''
+  description: '',
+  quiz_url: '',
+  quiz_name: ''
 })
 
 // 计算统计数据
@@ -392,16 +413,45 @@ const showUploadDialog = (course) => {
   currentCourse.value = course
   uploadForm.value = {
     file_type: 'material',
-    description: ''
+    description: '',
+    quiz_url: '',
+    quiz_name: ''
   }
   uploadDialogVisible.value = true
 }
 
 // 提交上传
-const submitUpload = () => {
-  if (uploadRef.value) {
+const submitUpload = async () => {
+  if (uploadForm.value.file_type === 'quiz') {
+    // Quiz类型：提交链接
+    if (!uploadForm.value.quiz_url.trim()) {
+      ElMessage.warning('请输入Quiz链接')
+      return
+    }
     uploading.value = true
-    uploadRef.value.submit()
+    try {
+      const formData = new FormData()
+      formData.append('file_type', 'quiz')
+      formData.append('quiz_url', uploadForm.value.quiz_url)
+      formData.append('quiz_name', uploadForm.value.quiz_name || 'Quiz')
+      formData.append('description', uploadForm.value.description || '')
+      await api.post(`/api/courses/course/${currentCourse.value.id}/upload_file/`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      ElMessage.success('Quiz链接添加成功')
+      uploadDialogVisible.value = false
+      if (currentCourse.value) loadCourseFiles(currentCourse.value.id)
+    } catch (error) {
+      ElMessage.error(error.response?.data?.error || 'Quiz链接添加失败')
+    } finally {
+      uploading.value = false
+    }
+  } else {
+    // 普通文件上传
+    if (uploadRef.value) {
+      uploading.value = true
+      uploadRef.value.submit()
+    }
   }
 }
 
@@ -428,9 +478,14 @@ const handleUploadError = (error) => {
 
 // 下载文件
 const downloadFile = (file) => {
-  console.log('打开文件:', file)
-  if (file.file_url) {
-    // 直接在新窗口打开文件URL
+  if (file.file_type === 'quiz' && file.quiz_url) {
+    const match = file.quiz_url.match(/\/quiz\/([^/]+)\/?$/)
+    if (match) {
+      router.push(`/quiz/${match[1]}`)
+    } else {
+      window.open(file.quiz_url, '_blank')
+    }
+  } else if (file.file_url) {
     window.open(file.file_url, '_blank')
   } else {
     ElMessage.error('文件链接不可用')
@@ -457,6 +512,7 @@ const getFileTypeTag = (fileType) => {
     'syllabus': 'danger',
     'material': 'primary',
     'video': 'success',
+    'quiz': 'warning',
     'other': 'info'
   }
   return tags[fileType] || 'info'

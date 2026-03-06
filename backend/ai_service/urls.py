@@ -2,7 +2,9 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     AIConversationViewSet, KnowledgeBaseViewSet,
-    ai_chat, get_recommendations, semantic_search
+    ai_chat, ai_chat_with_image, get_recommendations, semantic_search,
+    upload_and_generate_quiz, my_quizzes, publish_quiz, quiz_detail,
+    quiz_by_share_code, submit_quiz, quiz_submissions, delete_quiz, course_quizzes
 )
 
 router = DefaultRouter()
@@ -11,8 +13,21 @@ router.register(r'knowledge', KnowledgeBaseViewSet, basename='knowledge')
 
 urlpatterns = [
     path('chat/', ai_chat, name='ai_chat'),
+    path('chat-with-image/', ai_chat_with_image, name='ai_chat_with_image'),
+    path('chat-with-file/', ai_chat_with_image, name='ai_chat_with_file'),
     path('recommendations/', get_recommendations, name='get_recommendations'),
     path('search/', semantic_search, name='semantic_search'),
+
+    # Quiz相关
+    path('quiz/generate/', upload_and_generate_quiz, name='generate_quiz'),
+    path('quiz/my/', my_quizzes, name='my_quizzes'),
+    path('quiz/<int:quiz_id>/', quiz_detail, name='quiz_detail'),
+    path('quiz/<int:quiz_id>/publish/', publish_quiz, name='publish_quiz'),
+    path('quiz/<int:quiz_id>/submit/', submit_quiz, name='submit_quiz'),
+    path('quiz/<int:quiz_id>/submissions/', quiz_submissions, name='quiz_submissions'),
+    path('quiz/<int:quiz_id>/delete/', delete_quiz, name='delete_quiz'),
+    path('quiz/share/<str:share_code>/', quiz_by_share_code, name='quiz_by_share_code'),
+    path('quiz/course/<int:course_id>/', course_quizzes, name='course_quizzes'),
 ]
 
 # 手动添加ViewSet的URL，避免格式后缀转换器冲突

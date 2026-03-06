@@ -75,6 +75,12 @@ const routes = [
     meta: { title: 'AI学习助手', requiresAuth: true }
   },
   {
+    path: '/quiz/:shareCode',
+    name: 'QuizPage',
+    component: () => import('@/views/QuizPage.vue'),
+    meta: { title: 'Quiz答题', requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login.vue'),

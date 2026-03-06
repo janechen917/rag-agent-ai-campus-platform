@@ -130,7 +130,7 @@ class CourseViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def upload_file(self, request, pk=None):
-        """上传课程文件（支持多个文件）"""
+        """上传课程文件（支持多个文件）或添加Quiz链接"""
         course = self.get_object()
         
         # 检查是否是课程讲师
@@ -140,6 +140,33 @@ class CourseViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        file_type = request.data.get('file_type', 'other')
+        description = request.data.get('description', '')
+        
+        # Quiz类型：仅需超链接，无需文件
+        if file_type == 'quiz':
+            quiz_url = request.data.get('quiz_url', '').strip()
+            quiz_name = request.data.get('quiz_name', 'Quiz').strip()
+            if not quiz_url:
+                return Response(
+                    {'error': '请提供Quiz链接'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            course_file = CourseFile.objects.create(
+                course=course,
+                file_name=quiz_name or 'Quiz',
+                file_type='quiz',
+                quiz_url=quiz_url,
+                description=description,
+                uploaded_by=request.user
+            )
+            serializer = CourseFileSerializer(course_file, context={'request': request})
+            return Response({
+                'message': 'Quiz链接添加成功',
+                'file': serializer.data
+            }, status=status.HTTP_201_CREATED)
+        
+        # 普通文件上传
         if 'file' not in request.FILES:
             return Response(
                 {'error': '请选择要上传的文件'},
@@ -147,8 +174,6 @@ class CourseViewSet(viewsets.ModelViewSet):
             )
         
         uploaded_file = request.FILES['file']
-        file_type = request.data.get('file_type', 'other')
-        description = request.data.get('description', '')
         
         # 创建CourseFile对象
         course_file = CourseFile.objects.create(
@@ -195,7 +220,8 @@ class CourseViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
-            course_file.file.delete()  # 删除物理文件
+            if course_file.file:
+                course_file.file.delete()  # 删除物理文件
             course_file.delete()  # 删除数据库记录
             
             return Response({'message': '文件删除成功'})
