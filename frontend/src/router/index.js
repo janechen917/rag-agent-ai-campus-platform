@@ -57,6 +57,12 @@ const routes = [
     meta: { title: '课程申请管理', requiresAuth: true, requiresRole: 'teacher' }
   },
   {
+    path: '/analytics',
+    name: 'DataAnalysis',
+    component: () => import('@/views/DataAnalysis.vue'),
+    meta: { title: '数据分析', requiresAuth: true, requiresRole: 'teacher' }
+  },
+  {
     path: '/course/:id',
     name: 'CourseDetail',
     component: () => import('@/views/CourseDetail.vue'),

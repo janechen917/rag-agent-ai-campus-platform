@@ -89,7 +89,7 @@ class QuizSerializer(serializers.ModelSerializer):
     class Meta:
         model = Quiz
         fields = ['id', 'title', 'course', 'course_title', 'creator', 'creator_name',
-                  'source_file_name', 'share_code', 'question_count', 'end_time',
+                  'source_file_name', 'share_code', 'question_count', 'max_attempts', 'end_time',
                   'is_published', 'questions', 'submission_count', 'created_at', 'updated_at']
         read_only_fields = ['id', 'creator', 'share_code', 'created_at', 'updated_at']
 
@@ -103,11 +103,14 @@ class QuizStudentSerializer(serializers.ModelSerializer):
     creator_name = serializers.CharField(source='creator.username', read_only=True)
     course_title = serializers.CharField(source='course.title', read_only=True, default='')
     has_submitted = serializers.SerializerMethodField()
+    attempts_used = serializers.SerializerMethodField()
+    remaining_attempts = serializers.SerializerMethodField()
 
     class Meta:
         model = Quiz
         fields = ['id', 'title', 'course', 'course_title', 'creator_name',
-                  'question_count', 'end_time', 'questions', 'has_submitted', 'created_at']
+                  'question_count', 'max_attempts', 'end_time', 'questions',
+                  'has_submitted', 'attempts_used', 'remaining_attempts', 'created_at']
         read_only_fields = ['id']
 
     def get_has_submitted(self, obj):
@@ -115,6 +118,19 @@ class QuizStudentSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             return obj.submissions.filter(student=request.user).exists()
         return False
+
+    def get_attempts_used(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.submissions.filter(student=request.user).count()
+        return 0
+
+    def get_remaining_attempts(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            used = obj.submissions.filter(student=request.user).count()
+            return max(0, obj.max_attempts - used)
+        return obj.max_attempts
 
 
 class QuizSubmissionSerializer(serializers.ModelSerializer):

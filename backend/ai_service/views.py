@@ -5,7 +5,7 @@ from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.db.models import Q
+from django.db.models import Q, Count, Avg, F
 from django.utils import timezone
 
 from .models import AIConversation, AIMessage, KnowledgeBase, CourseRecommendation, Quiz, QuizQuestion, QuizSubmission
@@ -545,6 +545,8 @@ def upload_and_generate_quiz(request):
     title = request.data.get('title', file.name.rsplit('.', 1)[0])
     question_count = int(request.data.get('question_count', 5))
     question_count = max(1, min(question_count, 30))  # 限制1-30题
+    max_attempts = int(request.data.get('max_attempts', 1))
+    max_attempts = max(1, min(max_attempts, 99))  # 限制1-99次
     end_time = request.data.get('end_time')
     course_id = request.data.get('course_id')
 
@@ -564,6 +566,7 @@ def upload_and_generate_quiz(request):
         source_file=file,
         source_file_name=file.name,
         question_count=question_count,
+        max_attempts=max_attempts,
         end_time=end_time,
     )
 
@@ -685,9 +688,10 @@ def submit_quiz(request, quiz_id):
     if quiz.end_time and timezone.now() > quiz.end_time:
         return Response({'error': 'Quiz已截止'}, status=status.HTTP_403_FORBIDDEN)
 
-    # 检查是否已提交
-    if QuizSubmission.objects.filter(quiz=quiz, student=request.user).exists():
-        return Response({'error': '您已提交过此Quiz'}, status=status.HTTP_400_BAD_REQUEST)
+    # 检查答题次数限制
+    attempts_used = QuizSubmission.objects.filter(quiz=quiz, student=request.user).count()
+    if attempts_used >= quiz.max_attempts:
+        return Response({'error': f'您已达到最大答题次数({quiz.max_attempts}次)'}, status=status.HTTP_400_BAD_REQUEST)
 
     answers = request.data.get('answers', {})
     if not answers:
@@ -734,6 +738,8 @@ def submit_quiz(request, quiz_id):
         'total_questions': total,
         'correct_count': correct,
         'questions': result_questions,
+        'attempt_number': attempts_used + 1,
+        'remaining_attempts': max(0, quiz.max_attempts - attempts_used - 1),
     })
 
 
@@ -749,6 +755,135 @@ def quiz_submissions(request, quiz_id):
     submissions = quiz.submissions.all().select_related('student')
     serializer = QuizSubmissionSerializer(submissions, many=True)
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def quiz_statistics(request, quiz_id):
+    """教师查看Quiz统计分析"""
+    try:
+        quiz = Quiz.objects.get(id=quiz_id, creator=request.user)
+    except Quiz.DoesNotExist:
+        return Response({'error': 'Quiz不存在或无权操作'}, status=status.HTTP_404_NOT_FOUND)
+
+    submissions = quiz.submissions.all().select_related('student')
+    questions = quiz.questions.all().order_by('order')
+
+    # 每道题的统计
+    question_stats = []
+    for q in questions:
+        total_answers = 0
+        correct_answers = 0
+        option_distribution = {'A': 0, 'B': 0, 'C': 0, 'D': 0}
+
+        for sub in submissions:
+            student_answer = sub.answers.get(str(q.id), '')
+            if student_answer:
+                total_answers += 1
+                upper_answer = student_answer.upper()
+                if upper_answer in option_distribution:
+                    option_distribution[upper_answer] += 1
+                if upper_answer == q.correct_answer.upper():
+                    correct_answers += 1
+
+        wrong_count = total_answers - correct_answers
+        question_stats.append({
+            'question_id': q.id,
+            'question_text': q.question_text,
+            'order': q.order,
+            'correct_answer': q.correct_answer,
+            'total_answers': total_answers,
+            'correct_count': correct_answers,
+            'wrong_count': wrong_count,
+            'correct_rate': round((correct_answers / total_answers) * 100, 1) if total_answers > 0 else 0,
+            'wrong_rate': round((wrong_count / total_answers) * 100, 1) if total_answers > 0 else 0,
+            'option_distribution': option_distribution,
+        })
+
+    # 总体统计
+    total_submissions = submissions.count()
+    unique_students = submissions.values('student').distinct().count()
+    avg_score = submissions.aggregate(avg=Avg('score'))['avg'] or 0
+    score_distribution = {
+        '0-59': submissions.filter(score__lt=60).count(),
+        '60-69': submissions.filter(score__gte=60, score__lt=70).count(),
+        '70-79': submissions.filter(score__gte=70, score__lt=80).count(),
+        '80-89': submissions.filter(score__gte=80, score__lt=90).count(),
+        '90-100': submissions.filter(score__gte=90).count(),
+    }
+
+    # 每个学生的所有提交记录
+    student_submissions = []
+    for sub in submissions:
+        student_submissions.append({
+            'student_name': sub.student.username,
+            'score': sub.score,
+            'correct_count': sub.correct_count,
+            'total_questions': sub.total_questions,
+            'submitted_at': sub.submitted_at.isoformat(),
+            'answers': sub.answers,
+        })
+
+    return Response({
+        'quiz_title': quiz.title,
+        'max_attempts': quiz.max_attempts,
+        'total_submissions': total_submissions,
+        'unique_students': unique_students,
+        'average_score': round(avg_score, 1),
+        'score_distribution': score_distribution,
+        'question_stats': question_stats,
+        'student_submissions': student_submissions,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_quiz_submissions(request, quiz_id):
+    """学生查看自己在某个Quiz的所有提交记录"""
+    try:
+        quiz = Quiz.objects.get(id=quiz_id)
+    except Quiz.DoesNotExist:
+        return Response({'error': 'Quiz不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+    submissions = QuizSubmission.objects.filter(
+        quiz=quiz, student=request.user
+    ).order_by('-submitted_at')
+
+    questions = quiz.questions.all().order_by('order')
+
+    results = []
+    for sub in submissions:
+        question_details = []
+        for q in questions:
+            student_answer = sub.answers.get(str(q.id), '')
+            question_details.append({
+                'id': q.id,
+                'question_text': q.question_text,
+                'option_a': q.option_a,
+                'option_b': q.option_b,
+                'option_c': q.option_c,
+                'option_d': q.option_d,
+                'correct_answer': q.correct_answer,
+                'explanation': q.explanation,
+                'your_answer': student_answer,
+                'is_correct': student_answer.upper() == q.correct_answer.upper() if student_answer else False,
+            })
+        results.append({
+            'id': sub.id,
+            'score': sub.score,
+            'total_questions': sub.total_questions,
+            'correct_count': sub.correct_count,
+            'submitted_at': sub.submitted_at.isoformat(),
+            'questions': question_details,
+        })
+
+    return Response({
+        'quiz_title': quiz.title,
+        'max_attempts': quiz.max_attempts,
+        'attempts_used': submissions.count(),
+        'remaining_attempts': max(0, quiz.max_attempts - submissions.count()),
+        'submissions': results,
+    })
 
 
 @api_view(['DELETE'])
@@ -776,3 +911,98 @@ def course_quizzes(request, course_id):
     quizzes = Quiz.objects.filter(course=course, is_published=True)
     serializer = QuizStudentSerializer(quizzes, many=True, context={'request': request})
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def teacher_analytics(request):
+    """教师数据分析总览 - 获取该教师所有课程的Quiz答题情况"""
+    courses = Course.objects.filter(instructor=request.user)
+    if not courses.exists():
+        return Response({'courses': [], 'overview': {
+            'total_courses': 0, 'total_quizzes': 0,
+            'total_submissions': 0, 'overall_avg_score': 0,
+        }})
+
+    all_quizzes = Quiz.objects.filter(course__in=courses).select_related('course')
+    all_submissions = QuizSubmission.objects.filter(quiz__in=all_quizzes)
+
+    # 总览
+    overview = {
+        'total_courses': courses.count(),
+        'total_quizzes': all_quizzes.count(),
+        'total_submissions': all_submissions.count(),
+        'overall_avg_score': round(all_submissions.aggregate(avg=Avg('score'))['avg'] or 0, 1),
+    }
+
+    # 按课程分组
+    course_data = []
+    for course in courses:
+        quizzes = all_quizzes.filter(course=course)
+        course_submissions = all_submissions.filter(quiz__in=quizzes)
+
+        quiz_list = []
+        for quiz in quizzes:
+            subs = course_submissions.filter(quiz=quiz)
+            sub_count = subs.count()
+            avg = round(subs.aggregate(a=Avg('score'))['a'] or 0, 1)
+
+            score_dist = {
+                '0-59': subs.filter(score__lt=60).count(),
+                '60-69': subs.filter(score__gte=60, score__lt=70).count(),
+                '70-79': subs.filter(score__gte=70, score__lt=80).count(),
+                '80-89': subs.filter(score__gte=80, score__lt=90).count(),
+                '90-100': subs.filter(score__gte=90).count(),
+            }
+
+            # 每题正确率
+            questions = quiz.questions.all().order_by('order')
+            question_stats = []
+            for q in questions:
+                total = 0
+                correct = 0
+                for sub in subs:
+                    ans = sub.answers.get(str(q.id), '')
+                    if ans:
+                        total += 1
+                        if ans.upper() == q.correct_answer.upper():
+                            correct += 1
+                question_stats.append({
+                    'order': q.order,
+                    'question_text': q.question_text[:50],
+                    'correct_rate': round((correct / total) * 100, 1) if total > 0 else 0,
+                    'total_answers': total,
+                })
+
+            # 学生提交列表
+            student_records = []
+            for sub in subs.select_related('student').order_by('-submitted_at'):
+                student_records.append({
+                    'student_name': sub.student.username,
+                    'score': sub.score,
+                    'correct_count': sub.correct_count,
+                    'total_questions': sub.total_questions,
+                    'submitted_at': sub.submitted_at.isoformat(),
+                })
+
+            quiz_list.append({
+                'id': quiz.id,
+                'title': quiz.title,
+                'is_published': quiz.is_published,
+                'submission_count': sub_count,
+                'average_score': avg,
+                'score_distribution': score_dist,
+                'question_stats': question_stats,
+                'student_records': student_records,
+            })
+
+        course_data.append({
+            'id': course.id,
+            'title': course.title,
+            'quiz_count': quizzes.count(),
+            'total_submissions': course_submissions.count(),
+            'average_score': round(course_submissions.aggregate(a=Avg('score'))['a'] or 0, 1),
+            'quizzes': quiz_list,
+        })
+
+    return Response({'overview': overview, 'courses': course_data})

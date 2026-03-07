@@ -4,7 +4,8 @@ from .views import (
     AIConversationViewSet, KnowledgeBaseViewSet,
     ai_chat, ai_chat_with_image, get_recommendations, semantic_search,
     upload_and_generate_quiz, my_quizzes, publish_quiz, quiz_detail,
-    quiz_by_share_code, submit_quiz, quiz_submissions, delete_quiz, course_quizzes
+    quiz_by_share_code, submit_quiz, quiz_submissions, delete_quiz, course_quizzes,
+    quiz_statistics, my_quiz_submissions, teacher_analytics
 )
 
 router = DefaultRouter()
@@ -25,9 +26,14 @@ urlpatterns = [
     path('quiz/<int:quiz_id>/publish/', publish_quiz, name='publish_quiz'),
     path('quiz/<int:quiz_id>/submit/', submit_quiz, name='submit_quiz'),
     path('quiz/<int:quiz_id>/submissions/', quiz_submissions, name='quiz_submissions'),
+    path('quiz/<int:quiz_id>/statistics/', quiz_statistics, name='quiz_statistics'),
+    path('quiz/<int:quiz_id>/my-submissions/', my_quiz_submissions, name='my_quiz_submissions'),
     path('quiz/<int:quiz_id>/delete/', delete_quiz, name='delete_quiz'),
     path('quiz/share/<str:share_code>/', quiz_by_share_code, name='quiz_by_share_code'),
     path('quiz/course/<int:course_id>/', course_quizzes, name='course_quizzes'),
+
+    # 教师数据分析
+    path('teacher-analytics/', teacher_analytics, name='teacher_analytics'),
 ]
 
 # 手动添加ViewSet的URL，避免格式后缀转换器冲突

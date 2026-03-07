@@ -90,6 +90,7 @@ class Quiz(models.Model):
     source_file_name = models.CharField(max_length=255, verbose_name='源文件名')
     share_code = models.CharField(max_length=32, unique=True, verbose_name='分享码', default='')
     question_count = models.IntegerField(default=5, verbose_name='题目数量')
+    max_attempts = models.IntegerField(default=1, verbose_name='最大答题次数')
     end_time = models.DateTimeField(verbose_name='截止时间', null=True, blank=True)
     is_published = models.BooleanField(default=False, verbose_name='是否已发布')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
@@ -146,7 +147,6 @@ class QuizSubmission(models.Model):
         db_table = 'quiz_submissions'
         verbose_name = '测验提交'
         verbose_name_plural = '测验提交'
-        unique_together = ['quiz', 'student']
         ordering = ['-submitted_at']
 
     def __str__(self):

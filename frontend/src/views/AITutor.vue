@@ -136,6 +136,10 @@
           <el-form-item label="题目数量">
             <el-input-number v-model="quizForm.questionCount" :min="1" :max="30" />
           </el-form-item>
+          <el-form-item label="答题次数限制">
+            <el-input-number v-model="quizForm.maxAttempts" :min="1" :max="99" />
+            <div style="font-size: 12px; color: #909399; margin-top: 4px">每位学生最多可答题的次数</div>
+          </el-form-item>
           <el-form-item label="截止时间">
             <el-date-picker
               v-model="quizForm.endTime"
@@ -178,6 +182,7 @@
             </div>
             <div class="quiz-item-info">
               <span>{{ quiz.question_count }}题</span>
+              <span>限{{ quiz.max_attempts || 1 }}次</span>
               <span v-if="quiz.end_time">截止: {{ formatDateTime(quiz.end_time) }}</span>
               <span>{{ quiz.submission_count || 0 }}人提交</span>
             </div>
@@ -260,12 +265,13 @@
     </el-card>
 
     <!-- Quiz详情对话框（教师端） -->
-    <el-dialog v-model="quizDetailVisible" title="Quiz详情" width="700px" top="5vh">
+    <el-dialog v-model="quizDetailVisible" title="Quiz详情" width="800px" top="5vh">
       <div v-if="currentQuizDetail">
         <div class="quiz-detail-header">
           <h3>{{ currentQuizDetail.title }}</h3>
           <div>
             <el-tag>{{ currentQuizDetail.question_count }}题</el-tag>
+            <el-tag type="warning" style="margin-left:8px">限{{ currentQuizDetail.max_attempts || 1 }}次</el-tag>
             <el-tag v-if="currentQuizDetail.is_published" type="success" style="margin-left:8px">已发布</el-tag>
             <el-tag v-if="currentQuizDetail.course_title" type="info" style="margin-left:8px">{{ currentQuizDetail.course_title }}</el-tag>
           </div>
@@ -274,25 +280,116 @@
             <el-button size="small" text @click="copyShareLink(currentQuizDetail)">复制链接</el-button>
           </p>
         </div>
-        <el-divider />
-        <div v-for="(q, idx) in currentQuizDetail.questions" :key="q.id" class="quiz-question-preview">
-          <p class="question-title">{{ idx + 1 }}. {{ q.question_text }}</p>
-          <div class="question-options">
-            <p :class="{ correct: q.correct_answer === 'A' }">A. {{ q.option_a }}</p>
-            <p :class="{ correct: q.correct_answer === 'B' }">B. {{ q.option_b }}</p>
-            <p :class="{ correct: q.correct_answer === 'C' }">C. {{ q.option_c }}</p>
-            <p :class="{ correct: q.correct_answer === 'D' }">D. {{ q.option_d }}</p>
-          </div>
-          <p class="explanation" v-if="q.explanation">解析: {{ q.explanation }}</p>
-        </div>
-        <el-divider>提交记录 ({{ quizSubmissions.length }}人)</el-divider>
-        <el-table v-if="quizSubmissions.length > 0" :data="quizSubmissions" size="small" stripe>
-          <el-table-column prop="student_name" label="学生" />
-          <el-table-column label="得分"><template #default="{ row }">{{ row.score }}分</template></el-table-column>
-          <el-table-column label="正确数"><template #default="{ row }">{{ row.correct_count }}/{{ row.total_questions }}</template></el-table-column>
-          <el-table-column label="提交时间"><template #default="{ row }">{{ formatDateTime(row.submitted_at) }}</template></el-table-column>
-        </el-table>
-        <el-empty v-else description="暂无提交" :image-size="40" />
+
+        <el-tabs v-model="quizDetailTab">
+          <!-- 题目预览 Tab -->
+          <el-tab-pane label="题目预览" name="questions">
+            <div v-for="(q, idx) in currentQuizDetail.questions" :key="q.id" class="quiz-question-preview">
+              <p class="question-title">{{ idx + 1 }}. {{ q.question_text }}</p>
+              <div class="question-options">
+                <p :class="{ correct: q.correct_answer === 'A' }">A. {{ q.option_a }}</p>
+                <p :class="{ correct: q.correct_answer === 'B' }">B. {{ q.option_b }}</p>
+                <p :class="{ correct: q.correct_answer === 'C' }">C. {{ q.option_c }}</p>
+                <p :class="{ correct: q.correct_answer === 'D' }">D. {{ q.option_d }}</p>
+              </div>
+              <p class="explanation" v-if="q.explanation">解析: {{ q.explanation }}</p>
+            </div>
+          </el-tab-pane>
+
+          <!-- 数据分析 Tab -->
+          <el-tab-pane label="数据分析" name="statistics">
+            <div v-if="quizStats">
+              <!-- 总体概览 -->
+              <el-row :gutter="16" class="stats-overview">
+                <el-col :span="6">
+                  <el-statistic title="提交总数" :value="quizStats.total_submissions" />
+                </el-col>
+                <el-col :span="6">
+                  <el-statistic title="参与学生" :value="quizStats.unique_students">
+                    <template #suffix>人</template>
+                  </el-statistic>
+                </el-col>
+                <el-col :span="6">
+                  <el-statistic title="平均分" :value="quizStats.average_score" :precision="1">
+                    <template #suffix>分</template>
+                  </el-statistic>
+                </el-col>
+                <el-col :span="6">
+                  <el-statistic title="最大答题次数" :value="quizStats.max_attempts">
+                    <template #suffix>次</template>
+                  </el-statistic>
+                </el-col>
+              </el-row>
+
+              <!-- 分数分布 -->
+              <el-divider>分数分布</el-divider>
+              <div class="score-distribution">
+                <div v-for="(count, range) in quizStats.score_distribution" :key="range" class="score-bar-row">
+                  <span class="score-label">{{ range }}分</span>
+                  <el-progress
+                    :percentage="quizStats.total_submissions > 0 ? Math.round(count / quizStats.total_submissions * 100) : 0"
+                    :stroke-width="20"
+                    :color="getScoreColor(range)"
+                    :format="() => count + '人'"
+                    style="flex:1"
+                  />
+                </div>
+              </div>
+
+              <!-- 每题错误率统计 -->
+              <el-divider>每题答题情况</el-divider>
+              <el-table :data="quizStats.question_stats" size="small" stripe border>
+                <el-table-column label="题号" width="60">
+                  <template #default="{ row }">第{{ row.order }}题</template>
+                </el-table-column>
+                <el-table-column prop="question_text" label="题目" show-overflow-tooltip min-width="200" />
+                <el-table-column label="正确答案" width="80" align="center">
+                  <template #default="{ row }">{{ row.correct_answer }}</template>
+                </el-table-column>
+                <el-table-column label="作答人数" width="80" align="center">
+                  <template #default="{ row }">{{ row.total_answers }}</template>
+                </el-table-column>
+                <el-table-column label="正确率" width="100" align="center">
+                  <template #default="{ row }">
+                    <el-tag :type="row.correct_rate >= 60 ? 'success' : 'danger'" size="small">{{ row.correct_rate }}%</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="错误率" width="100" align="center">
+                  <template #default="{ row }">
+                    <el-tag :type="row.wrong_rate > 40 ? 'danger' : 'info'" size="small">{{ row.wrong_rate }}%</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="选项分布" min-width="200">
+                  <template #default="{ row }">
+                    <div class="option-dist">
+                      <span v-for="opt in ['A','B','C','D']" :key="opt"
+                            :class="{ 'correct-opt': opt === row.correct_answer }"
+                            class="opt-badge">
+                        {{ opt }}: {{ row.option_distribution[opt] }}
+                      </span>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+
+              <!-- 学生提交列表 -->
+              <el-divider>学生提交记录</el-divider>
+              <el-table :data="quizStats.student_submissions" size="small" stripe>
+                <el-table-column prop="student_name" label="学生" width="120" />
+                <el-table-column label="得分" width="80">
+                  <template #default="{ row }">{{ row.score }}分</template>
+                </el-table-column>
+                <el-table-column label="正确数" width="100">
+                  <template #default="{ row }">{{ row.correct_count }}/{{ row.total_questions }}</template>
+                </el-table-column>
+                <el-table-column label="提交时间">
+                  <template #default="{ row }">{{ formatDateTime(row.submitted_at) }}</template>
+                </el-table-column>
+              </el-table>
+            </div>
+            <el-empty v-else description="暂无统计数据" />
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </el-dialog>
 
@@ -402,6 +499,7 @@ const shareCodeInput = ref('')
 const quizForm = reactive({
   title: '',
   questionCount: 5,
+  maxAttempts: 1,
   endTime: null,
   courseId: null,
 })
@@ -409,6 +507,8 @@ const quizForm = reactive({
 const quizDetailVisible = ref(false)
 const currentQuizDetail = ref(null)
 const quizSubmissions = ref([])
+const quizDetailTab = ref('questions')
+const quizStats = ref(null)
 
 const publishDialogVisible = ref(false)
 const publishCourseId = ref(null)
@@ -596,6 +696,7 @@ const generateQuiz = async () => {
   formData.append('file', selectedFile.value)
   formData.append('title', quizForm.title || 'Quiz')
   formData.append('question_count', quizForm.questionCount)
+  formData.append('max_attempts', quizForm.maxAttempts)
   if (quizForm.endTime) formData.append('end_time', new Date(quizForm.endTime).toISOString())
   if (quizForm.courseId) formData.append('course_id', quizForm.courseId)
 
@@ -606,7 +707,7 @@ const generateQuiz = async () => {
     })
     ElMessage.success('Quiz生成成功！')
     selectedFile.value = null
-    Object.assign(quizForm, { title: '', questionCount: 5, endTime: null, courseId: null })
+    Object.assign(quizForm, { title: '', questionCount: 5, maxAttempts: 1, endTime: null, courseId: null })
     if (uploadRef.value) uploadRef.value.clearFiles()
     loadMyQuizzes()
     currentQuizDetail.value = response.data
@@ -631,14 +732,22 @@ const loadMyCourses = async () => {
 
 const viewQuizDetail = async (quiz) => {
   try {
-    const [detailRes, subsRes] = await Promise.all([
+    const [detailRes, subsRes, statsRes] = await Promise.all([
       api.get(`/api/ai/quiz/${quiz.id}/`),
-      api.get(`/api/ai/quiz/${quiz.id}/submissions/`)
+      api.get(`/api/ai/quiz/${quiz.id}/submissions/`),
+      api.get(`/api/ai/quiz/${quiz.id}/statistics/`)
     ])
     currentQuizDetail.value = detailRes.data
     quizSubmissions.value = subsRes.data
+    quizStats.value = statsRes.data
+    quizDetailTab.value = 'questions'
     quizDetailVisible.value = true
   } catch (e) { ElMessage.error('获取Quiz详情失败') }
+}
+
+const getScoreColor = (range) => {
+  const colors = { '0-59': '#F56C6C', '60-69': '#E6A23C', '70-79': '#409EFF', '80-89': '#67C23A', '90-100': '#529b2e' }
+  return colors[range] || '#409EFF'
 }
 
 const showPublishDialog = (quiz) => {
@@ -1135,4 +1244,23 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 .file-size { font-size: 12px; color: #909399; margin-top: 2px; }
+
+/* Statistics styles */
+.stats-overview { margin-bottom: 16px; text-align: center; }
+.score-distribution { padding: 0 10px; }
+.score-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.score-label { width: 65px; font-size: 13px; color: #606266; text-align: right; }
+.option-dist { display: flex; gap: 8px; flex-wrap: wrap; }
+.opt-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #f4f4f5;
+  color: #909399;
+}
+.opt-badge.correct-opt {
+  background: #f0f9eb;
+  color: #67C23A;
+  font-weight: bold;
+}
 </style>
