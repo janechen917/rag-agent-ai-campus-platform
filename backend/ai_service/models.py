@@ -151,3 +151,19 @@ class QuizSubmission(models.Model):
 
     def __str__(self):
         return f"{self.student.username} - {self.quiz.title} - {self.score}分"
+
+
+class QuizReminderLog(models.Model):
+    """Quiz提醒邮件发送日志（防止重复发送）"""
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='reminder_logs', verbose_name='测验')
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reminder_logs', verbose_name='学生')
+    sent_at = models.DateTimeField(auto_now_add=True, verbose_name='发送时间')
+
+    class Meta:
+        db_table = 'quiz_reminder_logs'
+        verbose_name = 'Quiz提醒日志'
+        verbose_name_plural = 'Quiz提醒日志'
+        unique_together = ['quiz', 'student']  # 每个 Quiz 每个学生只发一次
+
+    def __str__(self):
+        return f"{self.student.username} - {self.quiz.title} - {self.sent_at}"

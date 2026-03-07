@@ -167,3 +167,21 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+# -----------------------------------------------
+# 邮件配置（163邮箱 SMTP）
+# 在 .env 文件中配置以下环境变量：
+#   EMAIL_HOST_USER=your_account@163.com
+#   EMAIL_HOST_PASSWORD=your_smtp_auth_code   # 163授权码，非登录密码
+# -----------------------------------------------
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.163.com'
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True
+EMAIL_USE_TLS = False
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+# Quiz提醒邮件：DDL多少小时前发送提醒（默认24小时）
+QUIZ_REMINDER_HOURS_BEFORE = int(os.getenv('QUIZ_REMINDER_HOURS_BEFORE', 24))
