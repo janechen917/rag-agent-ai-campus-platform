@@ -41,7 +41,7 @@
               <el-icon><User /></el-icon>
               <span>学生管理</span>
             </el-menu-item>
-            <el-menu-item index="/ai-assistant">
+            <el-menu-item index="/ai-tutor">
               <el-icon><ChatDotRound /></el-icon>
               <span>AI教学助手</span>
             </el-menu-item>
