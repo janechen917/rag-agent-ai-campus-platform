@@ -131,9 +131,30 @@
                 <template #header>
                   <div class="card-header">
                     <span>学习日历</span>
+                    <el-badge v-if="pendingQuizzes.length" :value="pendingQuizzes.length" type="danger">
+                      <span style="font-size:12px;color:#F56C6C;">未完成Quiz</span>
+                    </el-badge>
                   </div>
                 </template>
-                <el-calendar v-model="calendarValue" />
+                <el-calendar v-model="calendarValue">
+                  <template #date-cell="{ data }">
+                    <div class="calendar-cell" @click="handleDateClick(data.day)">
+                      <span class="calendar-day" :class="{ 'is-today': data.isSelected }">{{ data.day.split('-')[2] }}</span>
+                      <div class="quiz-badges">
+                        <el-tooltip
+                          v-for="quiz in getQuizzesForDate(data.day)"
+                          :key="quiz.id"
+                          :content="quiz.title + ' | DDL: ' + formatDateTime(quiz.end_time)"
+                          placement="top"
+                        >
+                          <el-tag size="small" type="danger" class="quiz-tag" @click.stop="goToQuiz(quiz.share_code)">
+                            {{ quiz.title.length > 6 ? quiz.title.slice(0, 6) + '…' : quiz.title }}
+                          </el-tag>
+                        </el-tooltip>
+                      </div>
+                    </div>
+                  </template>
+                </el-calendar>
               </el-card>
 
               <el-card class="section-card" style="margin-top: 20px;">
@@ -161,10 +182,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
+import api from '@/api'
 import { 
   Reading, HomeFilled, ChatDotRound, ChatLineRound, User, Clock, Search
 } from '@element-plus/icons-vue'
@@ -189,6 +211,50 @@ const recentActivities = ref([
   { id: 3, time: '2024-02-26 16:20', content: '获得了"勤奋学习"徽章' },
 ])
 
+// 待完成 Quiz 数据
+const pendingQuizzes = ref([])
+
+// 按日期索引 Quiz（key: 'YYYY-MM-DD'）
+const quizDDLMap = computed(() => {
+  const map = {}
+  for (const quiz of pendingQuizzes.value) {
+    const dateKey = quiz.end_time.slice(0, 10)
+    if (!map[dateKey]) map[dateKey] = []
+    map[dateKey].push(quiz)
+  }
+  return map
+})
+
+const getQuizzesForDate = (day) => {
+  return quizDDLMap.value[day] || []
+}
+
+const formatDateTime = (isoStr) => {
+  if (!isoStr) return ''
+  const d = new Date(isoStr)
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+const handleDateClick = (day) => {
+  const quizzes = getQuizzesForDate(day)
+  if (quizzes.length > 0) {
+    ElMessage.info(`${day} 有 ${quizzes.length} 个Quiz待完成`)
+  }
+}
+
+const goToQuiz = (shareCode) => {
+  router.push(`/quiz/${shareCode}`)
+}
+
+const fetchPendingQuizzes = async () => {
+  try {
+    const res = await api.get('/api/ai/quiz/pending/')
+    pendingQuizzes.value = res.data || []
+  } catch (e) {
+    console.error('获取待完成Quiz失败:', e)
+  }
+}
+
 const handleLogout = () => {
   userStore.logout()
   ElMessage.success('已退出登录')
@@ -200,8 +266,7 @@ const continueLearning = (course) => {
 }
 
 onMounted(() => {
-  // 可以在这里加载用户的学习数据
-  console.log('学生端首页加载')
+  fetchPendingQuizzes()
 })
 </script>
 
@@ -343,5 +408,43 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* 日历 Quiz DDL 样式 */
+.calendar-cell {
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 2px 4px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.calendar-day {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.quiz-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.quiz-tag {
+  cursor: pointer;
+  width: 100%;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.quiz-tag:hover {
+  opacity: 0.85;
 }
 </style>

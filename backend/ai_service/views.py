@@ -901,6 +901,53 @@ def delete_quiz(request, quiz_id):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def pending_quizzes(request):
+    """
+    获取当前学生所有未完成的Quiz（用于日历DDL提醒）
+    条件：
+    1. Quiz已发布
+    2. 截止时间未过（或无截止时间）
+    3. 该学生尚未用完所有答题机会
+    """
+    from courses.models import Enrollment
+
+    # 获取学生已选课程ID
+    enrolled_course_ids = Enrollment.objects.filter(
+        user=request.user
+    ).values_list('course_id', flat=True)
+
+    # 获取这些课程下的已发布Quiz（包含截止时间的）
+    now = timezone.now()
+    quizzes = Quiz.objects.filter(
+        course_id__in=enrolled_course_ids,
+        is_published=True,
+        end_time__isnull=False,
+        end_time__gt=now,
+    ).select_related('course')
+
+    # 过滤掉学生已用完答题机会的Quiz
+    result = []
+    for quiz in quizzes:
+        attempts_used = QuizSubmission.objects.filter(
+            quiz=quiz, student=request.user
+        ).count()
+        if attempts_used < quiz.max_attempts:
+            result.append({
+                'id': quiz.id,
+                'title': quiz.title,
+                'end_time': quiz.end_time.isoformat(),
+                'course_id': quiz.course_id,
+                'course_name': quiz.course.title if quiz.course else '',
+                'share_code': quiz.share_code,
+                'attempts_used': attempts_used,
+                'max_attempts': quiz.max_attempts,
+            })
+
+    return Response(result)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def course_quizzes(request, course_id):
     """获取课程下的所有已发布Quiz（学生端）"""
     try:

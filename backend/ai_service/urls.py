@@ -5,7 +5,7 @@ from .views import (
     ai_chat, ai_chat_with_image, get_recommendations, semantic_search,
     upload_and_generate_quiz, my_quizzes, publish_quiz, quiz_detail,
     quiz_by_share_code, submit_quiz, quiz_submissions, delete_quiz, course_quizzes,
-    quiz_statistics, my_quiz_submissions, teacher_analytics
+    quiz_statistics, my_quiz_submissions, teacher_analytics, pending_quizzes
 )
 
 router = DefaultRouter()
@@ -34,6 +34,9 @@ urlpatterns = [
 
     # 教师数据分析
     path('teacher-analytics/', teacher_analytics, name='teacher_analytics'),
+
+    # 学生待完成Quiz（日历DDL）
+    path('quiz/pending/', pending_quizzes, name='pending_quizzes'),
 ]
 
 # 手动添加ViewSet的URL，避免格式后缀转换器冲突
