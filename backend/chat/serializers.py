@@ -4,17 +4,31 @@ from django.contrib.auth.models import User
 
 
 class UserSerializer(serializers.ModelSerializer):
+    user_type = serializers.CharField(source='profile.user_type', read_only=True)
+
     class Meta:
         model = User
-        fields = ['id', 'username']
+        fields = ['id', 'username', 'user_type']
 
 
 class MessageSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
+    receiver = UserSerializer(read_only=True)
+    receiver_id = serializers.IntegerField(write_only=True, required=False)
     
     class Meta:
         model = Message
-        fields = ['id', 'sender', 'content', 'message_type', 'is_read', 'created_at']
+        fields = [
+            'id', 'sender', 'receiver', 'receiver_id',
+            'content', 'message_type', 'is_read', 'created_at'
+        ]
+
+
+class ConversationSerializer(serializers.Serializer):
+    user = UserSerializer()
+    last_message = serializers.CharField()
+    last_message_at = serializers.DateTimeField()
+    unread_count = serializers.IntegerField()
 
 
 class ChatRoomSerializer(serializers.ModelSerializer):

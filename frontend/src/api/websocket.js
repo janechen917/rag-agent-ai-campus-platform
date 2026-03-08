@@ -67,8 +67,10 @@ class WebSocketService {
   send(message) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message))
+      return true
     } else {
       console.error('WebSocket未连接')
+      return false
     }
   }
 

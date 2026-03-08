@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/auth/', include('courses.urls.auth_urls')),
     path('api/courses/', include('courses.urls.course_urls')),
     path('api/ai/', include('ai_service.urls')),
+    path('api/chat/', include('chat.urls')),
     
     # Token authentication
     path('api/token/', obtain_auth_token, name='api_token_auth'),
