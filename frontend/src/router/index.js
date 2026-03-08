@@ -81,6 +81,12 @@ const routes = [
     meta: { title: 'AI学习助手', requiresAuth: true }
   },
   {
+    path: '/chat',
+    name: 'Chat',
+    component: () => import('@/views/Chat.vue'),
+    meta: { title: '学习社区聊天室', requiresAuth: true }
+  },
+  {
     path: '/quiz/:shareCode',
     name: 'QuizPage',
     component: () => import('@/views/QuizPage.vue'),

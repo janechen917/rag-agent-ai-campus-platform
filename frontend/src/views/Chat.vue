@@ -702,7 +702,7 @@ onUnmounted(() => {
 }
 
 .own-message .message-text {
-  background: #333333;
+  background: #409EFF;
   color: #fff;
 }
 

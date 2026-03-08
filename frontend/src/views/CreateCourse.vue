@@ -490,8 +490,8 @@ const submitCourse = async () => {
 }
 
 .cover-uploader-icon:hover {
-  border-color: #409eff;
-  color: #409eff;
+  border-color: #333333;
+  color: #333333;
 }
 
 .upload-tip {

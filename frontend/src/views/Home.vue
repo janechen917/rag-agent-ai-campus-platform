@@ -116,7 +116,7 @@ const features = ref([
     icon: 'Cpu',
     title: 'AI智能辅导',
     description: '智能问答系统，随时随地获取学习帮助',
-    color: '#409EFF'
+    color: '#333333'
   },
   {
     icon: 'TrendCharts',
@@ -143,7 +143,7 @@ const stats = ref([
     icon: 'User',
     label: '在线学习者',
     value: '2,345',
-    color: '#409EFF'
+    color: '#333333'
   },
   {
     icon: 'Reading',

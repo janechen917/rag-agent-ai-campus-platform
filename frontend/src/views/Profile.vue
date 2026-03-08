@@ -6,7 +6,7 @@
         <el-card class="profile-card">
           <div class="avatar-section">
             <el-avatar :size="120">{{ userStore.user?.username?.charAt(0) }}</el-avatar>
-            <el-button text type="primary" style="margin-top: 15px">更换头像</el-button>
+            <el-button text style="margin-top: 15px; color: #606266">更换头像</el-button>
           </div>
           
           <div class="user-info">
@@ -249,7 +249,7 @@ const savePreferences = () => {
 .stat-item .value {
   font-size: 28px;
   font-weight: bold;
-  color: #409EFF;
+  color: #333333;
   margin-bottom: 5px;
 }
 

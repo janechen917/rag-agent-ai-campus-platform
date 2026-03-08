@@ -703,7 +703,7 @@ onMounted(() => {
   height: 40px;
   background: white;
   border-radius: 8px;
-  color: #409EFF;
+  color: #333333;
 }
 
 .file-info {

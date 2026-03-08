@@ -3,7 +3,7 @@
     <el-container>
       <el-header class="header">
         <div class="header-left">
-          <el-icon :size="28" color="#409EFF"><Reading /></el-icon>
+          <el-icon :size="28" color="#333333"><Reading /></el-icon>
           <h2>校园智慧学习平台 - 教师端</h2>
         </div>
         <div class="header-right">
@@ -93,7 +93,7 @@
                 <template #header>
                   <div class="course-header">
                     <div class="course-title-area">
-                      <el-icon :size="22" color="#409EFF"><Reading /></el-icon>
+                      <el-icon :size="22" color="#333333"><Reading /></el-icon>
                       <h2>{{ course.title }}</h2>
                     </div>
                     <div class="course-tags">
@@ -263,11 +263,11 @@ const getScoreColor = (range) => {
   const colors = {
     '0-59': '#F56C6C',
     '60-69': '#E6A23C',
-    '70-79': '#409EFF',
+    '70-79': '#333333',
     '80-89': '#67C23A',
     '90-100': '#529b2e',
   }
-  return colors[range] || '#409EFF'
+  return colors[range] || '#333333'
 }
 
 const getCorrectRateColor = (rate) => {
@@ -349,6 +349,26 @@ onMounted(() => {
 
 .sidebar .el-menu {
   border-right: none;
+  background: white;
+}
+
+.sidebar :deep(.el-menu-item) {
+  background: white !important;
+  color: #303133 !important;
+}
+
+.sidebar :deep(.el-menu-item:hover) {
+  background: #ecf5ff !important;
+  color: #409EFF !important;
+}
+
+.sidebar :deep(.el-menu-item.is-active) {
+  background: #ecf5ff !important;
+  color: #409EFF !important;
+}
+
+.sidebar :deep(.el-menu-item i) {
+  color: #909399 !important;
 }
 
 .main-content {
@@ -385,7 +405,7 @@ onMounted(() => {
   border-top: 3px solid;
 }
 
-.stat-card.primary { border-color: #409EFF; }
+.stat-card.primary { border-color: #333333; }
 .stat-card.success { border-color: #67C23A; }
 .stat-card.warning { border-color: #E6A23C; }
 .stat-card.info { border-color: #909399; }

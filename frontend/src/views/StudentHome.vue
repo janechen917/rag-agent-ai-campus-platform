@@ -3,7 +3,7 @@
     <el-container>
       <el-header class="header">
         <div class="header-left">
-          <el-icon :size="28" color="#409EFF"><Reading /></el-icon>
+          <el-icon :size="28" color="#333333"><Reading /></el-icon>
           <h2>校园智慧学习平台 - 学生端</h2>
         </div>
         <div class="header-right">
@@ -294,7 +294,7 @@ onMounted(() => {
 .header-left h2 {
   margin: 0;
   font-size: 18px;
-  color: #409EFF;
+  color: #333333;
 }
 
 .header-right {
@@ -310,6 +310,29 @@ onMounted(() => {
 .sidebar {
   background: white;
   box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+}
+
+.sidebar :deep(.el-menu) {
+  background: white;
+}
+
+.sidebar :deep(.el-menu-item) {
+  background: white !important;
+  color: #303133 !important;
+}
+
+.sidebar :deep(.el-menu-item:hover) {
+  background: #ecf5ff !important;
+  color: #409EFF !important;
+}
+
+.sidebar :deep(.el-menu-item.is-active) {
+  background: #ecf5ff !important;
+  color: #409EFF !important;
+}
+
+.sidebar :deep(.el-menu-item i) {
+  color: #909399 !important;
 }
 
 .main-content {

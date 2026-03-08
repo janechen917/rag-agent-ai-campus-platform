@@ -41,7 +41,7 @@
               <el-table-column prop="file_name" label="文件名" min-width="200">
                 <template #default="scope">
                   <div style="display: flex; align-items: center; gap: 8px;">
-                    <el-icon :size="20" :color="scope.row.file_type === 'quiz' ? '#E6A23C' : '#409EFF'">
+                    <el-icon :size="20" :color="scope.row.file_type === 'quiz' ? '#E6A23C' : '#333333'">
                       <Link v-if="scope.row.file_type === 'quiz'" />
                       <Document v-else />
                     </el-icon>
@@ -210,7 +210,7 @@
                 <el-table-column prop="file_name" label="文件名" min-width="200">
                   <template #default="scope">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                      <el-icon :size="20" :color="scope.row.file_type === 'quiz' ? '#E6A23C' : '#409EFF'">
+                      <el-icon :size="20" :color="scope.row.file_type === 'quiz' ? '#E6A23C' : '#333333'">
                         <Link v-if="scope.row.file_type === 'quiz'" />
                         <Document v-else />
                       </el-icon>

@@ -16,7 +16,7 @@
             <p>24/7智能问答辅导</p>
           </div>
           <div class="highlight-item">
-            <el-icon :size="32" color="#409EFF"><VideoPlay /></el-icon>
+            <el-icon :size="32" color="#333333"><VideoPlay /></el-icon>
             <h3>丰富课程</h3>
             <p>海量优质学习资源</p>
           </div>
@@ -63,9 +63,9 @@
                 />
               </el-form-item>
 
-              <el-form-item>
+              <el-form-item class="login-options-row">
                 <el-checkbox v-model="loginForm.remember">记住我</el-checkbox>
-                <el-link type="primary" style="float: right">忘记密码？</el-link>
+                <el-link type="primary" class="forgot-link">忘记密码？</el-link>
               </el-form-item>
 
               <el-form-item>
@@ -426,6 +426,18 @@ const handleRegister = async () => {
 
 .login-tabs {
   margin-top: 20px;
+}
+
+.login-options-row :deep(.el-form-item__content) {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.forgot-link {
+  margin-left: auto;
 }
 
 .social-login {

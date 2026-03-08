@@ -145,6 +145,48 @@ const handleLogout = () => {
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
+
+/* 全局 Primary 按钮和交互元素样式 */
+:deep(.el-button--primary) {
+  background-color: #409EFF !important;
+  border-color: #409EFF !important;
+}
+
+:deep(.el-button--primary:hover) {
+  background-color: #66b1ff !important;
+  border-color: #66b1ff !important;
+}
+
+:deep(.el-button--primary:active) {
+  background-color: #3a8ee6 !important;
+  border-color: #3a8ee6 !important;
+}
+
+/* Primary link */
+:deep(.el-button.is-text.is-link.el-button--primary) {
+  color: #409EFF !important;
+}
+
+:deep(.el-button.is-text.is-link.el-button--primary:hover) {
+  color: #66b1ff !important;
+}
+
+/* 其他UI元素 - Input focus, Tabs active 等 */
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2) !important;
+}
+
+:deep(.el-input.is-focus .el-input__wrapper) {
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2) !important;
+}
+
+:deep(.el-tabs__nav-wrap::after) {
+  background-color: #409EFF !important;
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: #409EFF !important;
+}
 </style>
 
 <style>

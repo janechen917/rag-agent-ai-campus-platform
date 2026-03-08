@@ -24,7 +24,7 @@
             <el-avatar v-if="message.role === 'user'" :size="40">
               {{ userStore.user?.username?.charAt(0) || 'U' }}
             </el-avatar>
-            <el-avatar v-else :size="40" style="background: #409EFF">
+            <el-avatar v-else :size="40" style="background: #333333">
               <el-icon><Cpu /></el-icon>
             </el-avatar>
           </div>
@@ -44,7 +44,7 @@
         
         <div v-if="isLoading" class="message assistant">
           <div class="avatar">
-            <el-avatar :size="40" style="background: #409EFF">
+            <el-avatar :size="40" style="background: #333333">
               <el-icon><Cpu /></el-icon>
             </el-avatar>
           </div>
@@ -75,7 +75,7 @@
         
         <div v-if="uploadedFileInfo" class="image-attachment-bar">
           <el-image v-if="uploadedFileInfo.isImage" :src="uploadedImagePreview" fit="cover" style="width: 48px; height: 48px; border-radius: 6px;" />
-          <el-icon v-else :size="32" color="#409EFF"><Document /></el-icon>
+          <el-icon v-else :size="32" color="#333333"><Document /></el-icon>
           <span class="attachment-text">{{ uploadedFileInfo.isImage ? '图片' : uploadedFileInfo.name }} 已附加，发送后将一起提交</span>
           <el-button type="danger" :icon="Close" circle size="small" @click="removeImage" />
         </div>
@@ -226,7 +226,7 @@
 
           <div v-if="uploadedFileInfo && !uploadedFileInfo.isImage" class="file-preview-box">
             <div class="file-icon-row">
-              <el-icon :size="36" color="#409EFF"><Document /></el-icon>
+              <el-icon :size="36" color="#333333"><Document /></el-icon>
               <div class="file-meta">
                 <div class="file-name">{{ uploadedFileInfo.name }}</div>
                 <div class="file-size">{{ uploadedFileInfo.sizeText }}</div>
@@ -767,8 +767,8 @@ const viewQuizDetail = async (quiz) => {
 }
 
 const getScoreColor = (range) => {
-  const colors = { '0-59': '#F56C6C', '60-69': '#E6A23C', '70-79': '#409EFF', '80-89': '#67C23A', '90-100': '#529b2e' }
-  return colors[range] || '#409EFF'
+  const colors = { '0-59': '#F56C6C', '60-69': '#E6A23C', '70-79': '#333333', '80-89': '#67C23A', '90-100': '#529b2e' }
+  return colors[range] || '#333333'
 }
 
 const showPublishDialog = (quiz) => {
@@ -947,7 +947,7 @@ onMounted(() => {
 }
 
 .message.user .content {
-  background: #409EFF;
+  background: #333333;
   color: white;
   padding: 12px 16px;
   border-radius: 12px;
@@ -1010,7 +1010,7 @@ onMounted(() => {
 .loading span {
   width: 8px;
   height: 8px;
-  background: #409EFF;
+  background: #333333;
   border-radius: 50%;
   animation: bounce 1.4s infinite ease-in-out both;
 }
@@ -1075,6 +1075,7 @@ onMounted(() => {
   width: 380px;
   height: 100%;
   overflow-y: auto;
+  background: white;
 }
 
 .sidebar-header {
@@ -1082,10 +1083,15 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   font-weight: bold;
+  color: #303133;
+  background: #f5f7fa;
+  padding: 16px;
+  margin: -20px -20px 16px -20px;
+  border-radius: 8px 8px 0 0;
 }
 
-.upload-area { width: 100%; }
-.upload-area :deep(.el-upload-dragger) { padding: 20px; }
+.upload-area { width: 100%; background: white; border-radius: 8px; padding: 16px; }
+.upload-area :deep(.el-upload-dragger) { padding: 20px; background: white; }
 .quiz-settings { margin-top: 16px; }
 
 .quiz-list { max-height: 400px; overflow-y: auto; }
@@ -1162,9 +1168,9 @@ onMounted(() => {
   cursor: pointer;
   transition: border-color 0.3s;
 }
-.upload-trigger:hover { border-color: #409EFF; }
+.upload-trigger:hover { border-color: #333333; }
 .upload-trigger-text { margin-top: 10px; font-size: 14px; color: #606266; }
-.upload-trigger-tip { margin-top: 4px; font-size: 12px; color: #909399; }
+.upload-trigger-tip { margin-top: 4px; font-size: 12px; color: #606266; }
 
 .image-preview-box {
   margin-top: 12px;
@@ -1198,8 +1204,8 @@ onMounted(() => {
   transition: all 0.3s;
 }
 .history-item:hover {
-  background: #f0f7ff;
-  border-color: #409EFF;
+  background: #f5f5f5;
+  border-color: #333333;
 }
 .history-title {
   font-size: 14px;
@@ -1222,14 +1228,14 @@ onMounted(() => {
   gap: 10px;
   margin-bottom: 10px;
   padding: 8px 12px;
-  background: #f0f7ff;
+  background: #ecf5ff;
   border-radius: 8px;
   border: 1px solid #d9ecff;
 }
 .attachment-text {
   flex: 1;
   font-size: 13px;
-  color: #409EFF;
+  color: #333333;
 }
 
 .message-image {
@@ -1241,11 +1247,11 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: #f0f7ff;
+  background: #ecf5ff;
   border: 1px solid #d9ecff;
   border-radius: 6px;
   font-size: 13px;
-  color: #409EFF;
+  color: #333333;
   margin-bottom: 6px;
 }
 

@@ -2,7 +2,7 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 const api = axios.create({
-  baseURL: '',  // 使用Vite代理，不需要完整URL
+  baseURL: '',  // 统一走 Vite 代理，避免跨域和端口可见性问题
   timeout: 300000,  // 300秒，AI Quiz生成需要较长时间
 })
 
