@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from courses.models import Course
 
 
 class ChatRoom(models.Model):
@@ -30,6 +31,7 @@ class Message(models.Model):
     ]
     
     room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, related_name='messages', verbose_name='聊天室', null=True, blank=True)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='messages', verbose_name='课程', null=True, blank=True, help_text='公共消息关联的课程')
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages', verbose_name='发送者')
     receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_messages', verbose_name='接收者', null=True, blank=True)
     message_type = models.CharField(max_length=20, choices=MESSAGE_TYPE_CHOICES, default='text', verbose_name='消息类型')

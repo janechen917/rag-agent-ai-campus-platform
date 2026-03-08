@@ -15,11 +15,13 @@ class MessageSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
     receiver = UserSerializer(read_only=True)
     receiver_id = serializers.IntegerField(write_only=True, required=False)
+    course = serializers.IntegerField(source='course.id', read_only=True)
+    course_id = serializers.IntegerField(write_only=True, required=False)
     
     class Meta:
         model = Message
         fields = [
-            'id', 'sender', 'receiver', 'receiver_id',
+            'id', 'sender', 'receiver', 'receiver_id', 'course', 'course_id',
             'content', 'message_type', 'is_read', 'created_at'
         ]
 

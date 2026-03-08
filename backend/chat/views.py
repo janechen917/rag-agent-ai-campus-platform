@@ -7,6 +7,7 @@ from rest_framework.response import Response
 
 from .models import Message
 from .serializers import MessageSerializer, UserSerializer, ConversationSerializer
+from courses.models import Course, Enrollment
 
 
 class MessageViewSet(viewsets.ModelViewSet):
@@ -168,3 +169,57 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         serializer = MessageSerializer(message)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'])
+    def user_courses(self, request):
+        """Get courses related to current user (teacher's courses or student's enrolled courses)."""
+        user = request.user
+        if not hasattr(user, 'profile'):
+            return Response([], status=status.HTTP_200_OK)
+
+        if user.profile.user_type == 'teacher':
+            # 获取教师教授的课程
+            courses = Course.objects.filter(instructor=user).order_by('-created_at')
+        else:
+            # 获取学生选修的课程
+            enrolled_course_ids = Enrollment.objects.filter(
+                user=user
+            ).values_list('course_id', flat=True)
+            courses = Course.objects.filter(id__in=enrolled_course_ids).order_by('-created_at')
+
+        # 返回课程列表
+        data = [{
+            'id': course.id,
+            'title': course.title,
+            'category': course.category,
+        } for course in courses]
+
+        return Response(data)
+
+    @action(detail=False, methods=['get'])
+    def course_messages(self, request):
+        """Get public messages for a specific course."""
+        course_id = request.query_params.get('course_id')
+        if not course_id:
+            return Response({'error': '缺少 course_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            course = Course.objects.get(id=course_id)
+        except Course.DoesNotExist:
+            return Response({'error': '课程不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 验证用户是否有权限访问该课程的聊天室
+        user = request.user
+        if user != course.instructor:
+            # 检查学生是否选修了该课程
+            if not Enrollment.objects.filter(course=course, user=user).exists():
+                return Response({'error': '无权限访问该课程聊天室'}, status=status.HTTP_403_FORBIDDEN)
+
+        # 获取该课程的公共消息
+        messages = Message.objects.filter(
+            course=course,
+            receiver__isnull=True
+        ).select_related('sender').order_by('created_at')
+
+        serializer = MessageSerializer(messages, many=True)
+        return Response(serializer.data)

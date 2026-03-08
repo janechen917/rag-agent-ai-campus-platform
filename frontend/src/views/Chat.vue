@@ -51,7 +51,24 @@
         </el-tabs>
       </template>
 
+      <div v-if="activeTab === 'public'" class="course-selector">
+        <el-select
+          v-model="selectedCourseId"
+          placeholder="请选择课程聊天室"
+          @change="joinCourseRoom"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="course in userCourses"
+            :key="course.id"
+            :label="course.title"
+            :value="course.id"
+          />
+        </el-select>
+      </div>
+
       <div v-if="activeTab === 'public'" class="chat-messages" ref="publicMessagesContainer">
+        <el-empty v-if="!selectedCourseId" description="请先选择一个课程聊天室" />
         <div
           v-for="message in publicMessages"
           :key="`public-${message.id}`"
@@ -143,6 +160,9 @@ const userStore = useUserStore()
 const activeTab = ref('private')
 const newMessage = ref('')
 const isConnected = ref(false)
+const userCourses = ref([])
+const selectedCourseId = ref(null)
+
 
 const publicMessages = ref([])
 const publicMessagesContainer = ref(null)
@@ -331,7 +351,20 @@ const selectPrivateUser = async (user) => {
 
 const sendMessage = () => {
   const content = newMessage.value.trim()
-  if (!content || !isConnected.value) return
+  if (!content) return
+
+  const connected = websocketService.isConnected()
+  isConnected.value = connected
+  if (!connected) {
+    ElMessage.warning('聊天室连接中，请稍后再试')
+    return
+  }
+
+  // 如果是公共聊天室，检查是否已选择课程
+  if (activeTab.value === 'public' && !selectedCourseId.value) {
+    ElMessage.warning('请先选择课程聊天室')
+    return
+  }
 
   const clientMessageId = createClientMessageId()
 
@@ -390,15 +423,65 @@ const sendMessage = () => {
   scrollToBottom()
 }
 
+const loadUserCourses = async () => {
+  try {
+    const res = await api.get('/api/chat/messages/user_courses/')
+    userCourses.value = res.data || []
+  } catch (error) {
+    console.error('加载课程列表失败:', error)
+    ElMessage.error('加载课程列表失败')
+  }
+}
+
+const joinCourseRoom = async () => {
+  if (!selectedCourseId.value) return
+
+  publicMessages.value = []
+
+  const joined = websocketService.send({
+    type: 'join_course_room',
+    courseId: selectedCourseId.value,
+  })
+
+  if (!joined) {
+    ElMessage.warning('聊天室尚未连接，请稍后重试')
+    return
+  }
+
+  try {
+    const res = await api.get('/api/chat/messages/course_messages/', {
+      params: { course_id: selectedCourseId.value },
+    })
+    publicMessages.value = (res.data || []).map((msg) => ({
+      id: msg.id,
+      content: msg.content,
+      username: msg.sender?.username || '未知用户',
+      userId: msg.sender?.id,
+      timestamp: msg.created_at,
+      userType: msg.sender?.user_type,
+      courseId: msg.course || msg.course_id,
+    }))
+    scrollToBottom()
+  } catch (error) {
+    console.error('加载课程消息失败:', error)
+    ElMessage.error('加载课程消息失败')
+  }
+}
+
 const handleWebSocketMessage = (data) => {
   switch (data.type) {
     case 'chat_message':
+      if (!selectedCourseId.value || Number(data.courseId) !== Number(selectedCourseId.value)) {
+        break
+      }
+
       if (data.clientMessageId) {
         publicMessages.value = publicMessages.value.filter(
           (msg) => !(msg.clientMessageId === data.clientMessageId && String(msg.id).startsWith('temp-'))
         )
         updateQueueStatus(data.clientMessageId, 'sent')
       }
+
       publicMessages.value.push({
         id: data.id || Date.now(),
         clientMessageId: data.clientMessageId,
@@ -406,9 +489,16 @@ const handleWebSocketMessage = (data) => {
         username: data.username,
         userId: data.userId,
         userType: data.userType,
-        timestamp: data.timestamp
+        timestamp: data.timestamp,
+        courseId: data.courseId,
       })
       if (activeTab.value === 'public') scrollToBottom()
+      break
+
+    case 'joined_course_room':
+      break
+
+    case 'left_course_room':
       break
 
     case 'private_message':
@@ -446,24 +536,20 @@ const handleWebSocketMessage = (data) => {
       })
       break
 
-    case 'user_joined':
-      onlineUsers.value = data.online_count
-      break
-
-    case 'user_left':
-      onlineUsers.value = data.online_count
-      break
-
     case 'online_users':
       onlineUsers.value = data.count
       break
 
     case 'connection_established':
       isConnected.value = true
+      if (selectedCourseId.value) joinCourseRoom()
       break
 
     case 'error':
       ElMessage.error(data.message || '发送失败')
+      break
+
+    default:
       break
   }
 }
@@ -475,19 +561,27 @@ onMounted(async () => {
     return
   }
 
-  await loadContacts()
+  await Promise.all([loadContacts(), loadUserCourses()])
 
-  // 优先使用同域 WebSocket，走 Vite 的 /ws 代理，避免 Codespaces 端口/域名连通问题
+  if (userCourses.value.length === 1) {
+    selectedCourseId.value = userCourses.value[0].id
+  }
+
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const defaultWsUrl = `${protocol}://${window.location.host}/ws/chat/`
   const wsUrl = import.meta.env.VITE_WS_URL || defaultWsUrl
+
   websocketService.connect(wsUrl, token)
   websocketService.onMessage(handleWebSocketMessage)
 
   setTimeout(() => {
     isConnected.value = websocketService.isConnected()
+    if (isConnected.value && selectedCourseId.value) {
+      joinCourseRoom()
+    }
   }, 1000)
 })
+
 
 onUnmounted(() => {
   websocketService.removeMessageHandler(handleWebSocketMessage)
@@ -601,6 +695,10 @@ onUnmounted(() => {
 
 .tab-switch {
   margin-top: 10px;
+}
+
+.course-selector {
+  margin-bottom: 12px;
 }
 
 .chat-messages {
