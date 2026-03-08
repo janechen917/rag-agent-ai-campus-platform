@@ -436,11 +436,7 @@ const submitCourse = async () => {
       })
     })
     
-    const response = await api.post('/api/courses/course/', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
+    const response = await api.post('/api/courses/course/', formData)
     
     ElMessage.success(courseForm.is_published ? '课程创建并发布成功！' : '课程草稿保存成功！')
     router.push('/teacher-home')

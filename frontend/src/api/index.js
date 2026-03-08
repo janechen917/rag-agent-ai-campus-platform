@@ -3,10 +3,7 @@ import { ElMessage } from 'element-plus'
 
 const api = axios.create({
   baseURL: '',  // 使用Vite代理，不需要完整URL
-  timeout: 60000,  // 60秒，AI调用需要更长时间
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  timeout: 300000,  // 300秒，AI Quiz生成需要较长时间
 })
 
 // 请求拦截器
@@ -36,18 +33,15 @@ api.interceptors.response.use(
           localStorage.removeItem('token')
           window.location.href = '/login'
           break
-        case 403:
-          ElMessage.error('拒绝访问')
-          break
-        case 404:
-          ElMessage.error('请求的资源不存在')
-          break
+        // 400/403等业务错误由各API调用处自行处理，避免重复toast
+        // 仅在没有专门处理的情况下显示通用错误
         case 500:
-          ElMessage.error('服务器错误')
+          ElMessage.error('服务器内部错误，请稍后重试')
           break
-        default:
-          ElMessage.error(error.response.data?.message || '请求失败')
+        // default不显示toast，让各API处理器显示具体错误信息
       }
+    } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      ElMessage.error('请求超时，请检查网络后重试')
     } else {
       ElMessage.error('网络错误，请检查您的连接')
     }

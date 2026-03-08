@@ -435,9 +435,7 @@ const submitUpload = async () => {
       formData.append('quiz_url', uploadForm.value.quiz_url)
       formData.append('quiz_name', uploadForm.value.quiz_name || 'Quiz')
       formData.append('description', uploadForm.value.description || '')
-      await api.post(`/api/courses/course/${currentCourse.value.id}/upload_file/`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      await api.post(`/api/courses/course/${currentCourse.value.id}/upload_file/`, formData)
       ElMessage.success('Quiz链接添加成功')
       uploadDialogVisible.value = false
       if (currentCourse.value) loadCourseFiles(currentCourse.value.id)

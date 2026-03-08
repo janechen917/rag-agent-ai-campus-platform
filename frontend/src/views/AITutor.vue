@@ -569,7 +569,6 @@ const sendMessage = async (message) => {
       formData.append('file', uploadedImageFile.value)
       formData.append('history', JSON.stringify(messages.value.slice(-10).map(m => ({ role: m.role, content: m.content }))))
       response = await api.post('/api/ai/chat-with-file/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000,
       })
       // Clear file after sending
@@ -681,29 +680,51 @@ const loadConversation = async (conv) => {
 }
 
 // --- Quiz methods (Teacher) ---
-const handleFileChange = (file) => {
-  selectedFile.value = file.raw
-  if (!quizForm.title) quizForm.title = file.name.replace(/\.(pptx?|pdf|docx?|txt)$/i, '')
+const handleFileChange = (uploadFile) => {
+  // Element Plus el-upload on-change 回调参数是 UploadFile 对象
+  // 原始 File 对象在 uploadFile.raw 中
+  const rawFile = uploadFile.raw || uploadFile
+  if (!rawFile || !(rawFile instanceof File)) {
+    console.error('无效的文件对象:', uploadFile)
+    ElMessage.warning('文件读取失败，请重新上传')
+    return
+  }
+  selectedFile.value = rawFile
+  if (!quizForm.title) {
+    quizForm.title = (uploadFile.name || rawFile.name || '').replace(/\.(pptx?|pdf|docx?|txt)$/i, '')
+  }
 }
 
 const handleFileRemove = () => { selectedFile.value = null }
 
 const generateQuiz = async () => {
-  if (!selectedFile.value) { ElMessage.warning('请先上传文件'); return }
+  // 验证文件
+  if (!selectedFile.value) {
+    ElMessage.warning('请先上传文件')
+    return
+  }
+  
+  // 确保selectedFile是有效的File对象
+  if (!(selectedFile.value instanceof File)) {
+    console.error('selectedFile不是有效的File对象:', selectedFile.value)
+    ElMessage.error('文件格式异常，请重新上传')
+    selectedFile.value = null
+    if (uploadRef.value) uploadRef.value.clearFiles()
+    return
+  }
 
   isGenerating.value = true
   const formData = new FormData()
-  formData.append('file', selectedFile.value)
+  formData.append('file', selectedFile.value, selectedFile.value.name)
   formData.append('title', quizForm.title || 'Quiz')
-  formData.append('question_count', quizForm.questionCount)
-  formData.append('max_attempts', quizForm.maxAttempts)
+  formData.append('question_count', String(quizForm.questionCount))
+  formData.append('max_attempts', String(quizForm.maxAttempts))
   if (quizForm.endTime) formData.append('end_time', new Date(quizForm.endTime).toISOString())
-  if (quizForm.courseId) formData.append('course_id', quizForm.courseId)
+  if (quizForm.courseId) formData.append('course_id', String(quizForm.courseId))
 
   try {
     const response = await api.post('/api/ai/quiz/generate/', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000,
+      timeout: 120000,  // AI生成需要较长时间
     })
     ElMessage.success('Quiz生成成功！')
     selectedFile.value = null
@@ -781,9 +802,14 @@ const deleteQuiz = async (quiz) => {
   try {
     await ElMessageBox.confirm('确定要删除此Quiz吗？', '确认删除', { type: 'warning' })
     await api.delete(`/api/ai/quiz/${quiz.id}/delete/`)
-    ElMessage.success('已删除')
+    ElMessage.success('Quiz已删除')
     loadMyQuizzes()
-  } catch (e) { if (e !== 'cancel') ElMessage.error('删除失败') }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') {
+      console.error('删除Quiz失败:', e)
+      ElMessage.error(e.response?.data?.error || '删除失败，请稍后重试')
+    }
+  }
 }
 
 // --- Quiz methods (Student) ---

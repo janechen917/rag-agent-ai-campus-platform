@@ -17,7 +17,7 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
-        timeout: 60000  // 60秒超时，适应AI调用
+        timeout: 300000  // 300秒超时，适应AI Quiz生成等耗时调用
       },
       '/media': {
         target: 'http://localhost:8000',

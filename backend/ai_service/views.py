@@ -895,8 +895,15 @@ def delete_quiz(request, quiz_id):
     except Quiz.DoesNotExist:
         return Response({'error': 'Quiz不存在或无权操作'}, status=status.HTTP_404_NOT_FOUND)
 
+    # 删除关联的源文件
+    if quiz.source_file:
+        try:
+            quiz.source_file.delete(save=False)
+        except Exception:
+            pass  # 文件不存在也继续删除数据库记录
+    
     quiz.delete()
-    return Response({'message': 'Quiz已删除'}, status=status.HTTP_204_NO_CONTENT)
+    return Response(status=status.HTTP_204_NO_CONTENT)  # 204不应该有响应体
 
 
 @api_view(['GET'])
