@@ -4,9 +4,19 @@
       <el-header class="header">
         <div class="header-left">
           <el-icon :size="28" color="#333333"><Reading /></el-icon>
-          <h2>校园智慧学习平台 - 教师端</h2>
+          <h2>{{ t('nav.teacherTitle') }}</h2>
         </div>
         <div class="header-right">
+          <el-select
+            v-model="currentLocale"
+            size="small"
+            style="width: 110px;"
+            @change="handleLocaleChange"
+          >
+            <el-option value="zh-cn" :label="t('language.zhCn')" />
+            <el-option value="zh-tw" :label="t('language.zhTw')" />
+            <el-option value="en" :label="t('language.en')" />
+          </el-select>
           <el-badge :value="notifications" :hidden="notifications === 0" class="item">
             <el-button text class="notification-btn" @click="openNotificationCenter">
               <el-icon :size="24"><Bell /></el-icon>
@@ -15,8 +25,8 @@
           <el-avatar :size="40" :src="userStore.user?.profile?.avatar">
             {{ userStore.user?.username?.charAt(0).toUpperCase() }}
           </el-avatar>
-          <span class="username">{{ userStore.user?.username }} 老师</span>
-          <el-button type="danger" size="small" @click="handleLogout">退出</el-button>
+          <span class="username">{{ userStore.user?.username }}{{ t('teacher.teacherSuffix') }}</span>
+          <el-button type="danger" size="small" @click="handleLogout">{{ t('common.logout') }}</el-button>
         </div>
       </el-header>
 
@@ -25,75 +35,75 @@
           <el-menu :default-active="activeMenu" router>
             <el-menu-item index="/teacher-home">
               <el-icon><HomeFilled /></el-icon>
-              <span>教学主页</span>
+              <span>{{ t('nav.teacherHome') }}</span>
             </el-menu-item>
             <el-menu-item index="/my-courses">
               <el-icon><Reading /></el-icon>
-              <span>我的课程</span>
+              <span>{{ t('nav.myCourses') }}</span>
             </el-menu-item>
             <el-menu-item index="/create-course">
               <el-icon><Plus /></el-icon>
-              <span>创建课程</span>
+              <span>{{ t('nav.createCourse') }}</span>
             </el-menu-item>
             <el-menu-item index="/course-requests">
               <el-icon><Document /></el-icon>
-              <span>课程申请</span>
+              <span>{{ t('nav.courseRequests') }}</span>
             </el-menu-item>
             <el-menu-item index="/students">
               <el-icon><User /></el-icon>
-              <span>学生管理</span>
+              <span>{{ t('nav.studentManagement') }}</span>
             </el-menu-item>
             <el-menu-item index="/ai-tutor">
               <el-icon><ChatDotRound /></el-icon>
-              <span>AI教学助手</span>
+              <span>{{ t('nav.aiTeachingAssistant') }}</span>
             </el-menu-item>
             <el-menu-item index="/chat">
               <el-icon><ChatLineRound /></el-icon>
-              <span>师生沟通</span>
+              <span>{{ t('nav.communication') }}</span>
             </el-menu-item>
             <el-menu-item index="/analytics">
               <el-icon><DataAnalysis /></el-icon>
-              <span>数据分析</span>
+              <span>{{ t('nav.dataAnalysis') }}</span>
             </el-menu-item>
             <el-menu-item index="/profile">
               <el-icon><User /></el-icon>
-              <span>个人资料</span>
+              <span>{{ t('common.profile') }}</span>
             </el-menu-item>
           </el-menu>
         </el-aside>
 
         <el-main class="main-content">
           <div class="welcome-banner">
-            <h1>尊敬的 {{ userStore.user?.username }} 老师，您好！</h1>
-            <p>用心教学，传播知识，成就未来</p>
+            <h1>{{ t('teacher.welcome', { name: userStore.user?.username }) }}</h1>
+            <p>{{ t('teacher.subtitle') }}</p>
           </div>
 
           <el-row :gutter="20" class="stats-row">
             <el-col :span="6">
               <el-card class="stat-card primary">
-                <el-statistic title="开设课程" :value="stats.totalCourses">
-                  <template #suffix>门</template>
+                <el-statistic :title="t('teacher.stats.totalCourses')" :value="stats.totalCourses">
+                  <template #suffix>{{ t('teacher.stats.courses') }}</template>
                 </el-statistic>
               </el-card>
             </el-col>
             <el-col :span="6">
               <el-card class="stat-card success">
-                <el-statistic title="学生总数" :value="stats.totalStudents">
-                  <template #suffix>人</template>
+                <el-statistic :title="t('teacher.stats.totalStudents')" :value="stats.totalStudents">
+                  <template #suffix>{{ t('teacher.stats.students') }}</template>
                 </el-statistic>
               </el-card>
             </el-col>
             <el-col :span="6">
               <el-card class="stat-card warning">
-                <el-statistic title="待批改作业" :value="stats.pendingAssignments">
-                  <template #suffix>份</template>
+                <el-statistic :title="t('teacher.stats.pendingAssignments')" :value="stats.pendingAssignments">
+                  <template #suffix>{{ t('teacher.stats.assignments') }}</template>
                 </el-statistic>
               </el-card>
             </el-col>
             <el-col :span="6">
               <el-card class="stat-card info">
-                <el-statistic title="平均评分" :value="stats.avgRating">
-                  <template #suffix>/ 5.0</template>
+                <el-statistic :title="t('teacher.stats.avgRating')" :value="stats.avgRating">
+                  <template #suffix>{{ t('teacher.stats.ratingScale') }}</template>
                 </el-statistic>
               </el-card>
             </el-col>
@@ -104,14 +114,14 @@
               <el-card class="section-card">
                 <template #header>
                   <div class="card-header">
-                    <span>我的课程</span>
+                    <span>{{ t('teacher.sections.myCourses') }}</span>
                     <el-button type="primary" size="small" @click="$router.push('/create-course')">
-                      <el-icon><Plus /></el-icon> 创建新课程
+                      <el-icon><Plus /></el-icon> {{ t('teacher.buttons.createCourse') }}
                     </el-button>
                   </div>
                 </template>
                 <div class="course-list">
-                  <el-empty v-if="!myCourses.length" description="暂无课程" />
+                  <el-empty v-if="!myCourses.length" :description="t('teacher.sections.noCourses')" />
                   <div v-for="course in myCourses" :key="course.id" class="course-item">
                     <el-avatar shape="square" :size="80" :src="course.image">{{ course.title?.charAt(0) }}</el-avatar>
                     <div class="course-info">
@@ -120,17 +130,17 @@
                         <el-tag size="small" :type="course.category === 'required' ? 'danger' : 'success'">
                           {{ course.category_display }}
                         </el-tag>
-                        <span style="margin-left: 10px;">学生: {{ course.students_count || 0 }}人</span>
-                        <span style="margin-left: 10px;">评分: {{ course.rating || 0 }}</span>
+                        <span style="margin-left: 10px;">{{ t('teacher.courseInfo.students') }}: {{ course.students_count || 0 }}{{ t('teacher.courseInfo.studentsUnit') }}</span>
+                        <span style="margin-left: 10px;">{{ t('teacher.courseInfo.rating') }}: {{ course.rating || 0 }}</span>
                       </p>
                       <el-space>
-                        <el-button size="small" @click="viewCourse(course)">查看详情</el-button>
-                        <el-button size="small" @click="editCourse(course)">编辑课程</el-button>
-                        <el-button size="small" type="success" @click="viewStudents(course)">学生列表</el-button>
+                        <el-button size="small" @click="viewCourse(course)">{{ t('teacher.buttons.viewDetail') }}</el-button>
+                        <el-button size="small" @click="editCourse(course)">{{ t('teacher.buttons.editCourse') }}</el-button>
+                        <el-button size="small" type="success" @click="viewStudents(course)">{{ t('teacher.buttons.studentList') }}</el-button>
                       </el-space>
                     </div>
                     <el-tag :type="course.is_published ? 'success' : 'info'" size="large">
-                      {{ course.is_published ? '已发布' : '未发布' }}
+                      {{ course.is_published ? t('teacher.courseStatus.published') : t('teacher.courseStatus.unpublished') }}
                     </el-tag>
                   </div>
                 </div>
@@ -141,24 +151,24 @@
               <el-card class="section-card">
                 <template #header>
                   <div class="card-header">
-                    <span>快捷操作</span>
+                    <span>{{ t('teacher.sections.quickActions') }}</span>
                   </div>
                 </template>
                 <div class="quick-actions">
                   <el-button type="primary" @click="$router.push('/create-course')" style="width: 100%; margin-bottom: 10px;">
-                    <el-icon><Plus /></el-icon> 创建新课程
+                    <el-icon><Plus /></el-icon> {{ t('teacher.buttons.createCourse') }}
                   </el-button>
                   <el-button @click="$router.push('/my-courses')" style="width: 100%; margin-bottom: 10px;">
-                    <el-icon><Reading /></el-icon> 管理课程
+                    <el-icon><Reading /></el-icon> {{ t('teacher.buttons.manageCourses') }}
                   </el-button>
                   <el-button @click="$router.push('/students')" style="width: 100%; margin-bottom: 10px;">
-                    <el-icon><User /></el-icon> 学生管理
+                    <el-icon><User /></el-icon> {{ t('teacher.buttons.studentManagement') }}
                   </el-button>
                   <el-button @click="$router.push('/analytics')" style="width: 100%; margin-bottom: 10px;">
-                    <el-icon><DataAnalysis /></el-icon> 数据分析
+                    <el-icon><DataAnalysis /></el-icon> {{ t('teacher.buttons.dataAnalysis') }}
                   </el-button>
                   <el-button @click="$router.push('/chat')" style="width: 100%; margin-bottom: 10px;">
-                    <el-icon><ChatLineRound /></el-icon> 师生沟通
+                    <el-icon><ChatLineRound /></el-icon> {{ t('teacher.buttons.communication') }}
                   </el-button>
                 </div>
               </el-card>
@@ -166,7 +176,7 @@
               <el-card class="section-card" style="margin-top: 20px;">
                 <template #header>
                   <div class="card-header">
-                    <span>教学日历</span>
+                    <span>{{ t('teacher.sections.teachingCalendar') }}</span>
                   </div>
                 </template>
                 <el-calendar v-model="calendarValue" />
@@ -176,48 +186,48 @@
         </el-main>
       </el-container>
 
-      <el-drawer v-model="notificationDrawerVisible" title="通知中心" size="420px">
+      <el-drawer v-model="notificationDrawerVisible" :title="t('notification.center')" size="420px">
         <el-tabs>
-          <el-tab-pane :label="`待审批 (${pendingRequests.length})`" name="pending">
-            <el-empty v-if="!pendingRequests.length" description="暂无待审批申请" />
+          <el-tab-pane :label="`${t('notification.pendingApproval')} (${pendingRequests.length})`" name="pending">
+            <el-empty v-if="!pendingRequests.length" :description="t('notification.noApprovals')" />
             <div v-else class="notify-list">
               <div v-for="request in pendingRequests" :key="request.id" class="notify-item">
                 <div class="notify-title">{{ request.student?.username }} 申请加入《{{ request.course?.title }}》</div>
-                <div class="notify-meta">申请时间：{{ formatNotifyTime(request.created_at) }}</div>
-                <div v-if="request.message" class="notify-message">留言：{{ request.message }}</div>
+                <div class="notify-meta">{{ t('notification.applyTime') }}{{ formatNotifyTime(request.created_at) }}</div>
+                <div v-if="request.message" class="notify-message">{{ t('notification.message') }}{{ request.message }}</div>
               </div>
             </div>
             <el-button type="primary" style="width: 100%; margin-top: 12px;" @click="goToCourseRequests">
-              去审批课程申请
+              {{ t('notification.approveRequests') }}
             </el-button>
           </el-tab-pane>
 
-          <el-tab-pane :label="`学生评价 (${recentReviews.length})`" name="reviews">
-            <el-empty v-if="!recentReviews.length" description="暂无新的学生评价" />
+          <el-tab-pane :label="`${t('notification.studentReviews')} (${recentReviews.length})`" name="reviews">
+            <el-empty v-if="!recentReviews.length" :description="t('notification.noReviews')" />
             <div v-else class="notify-list">
               <div v-for="review in recentReviews" :key="review.notifyId" class="notify-item">
                 <div class="notify-title">
                   {{ review.user?.username }} 评价了《{{ review.course_title }}》
                 </div>
-                <div class="notify-meta">评分：{{ review.rating }}/5 · {{ formatNotifyTime(review.created_at) }}</div>
+                <div class="notify-meta">{{ t('notification.ratingScore') }}{{ review.rating }}{{ t('notification.ratingScale') }} · {{ formatNotifyTime(review.created_at) }}</div>
                 <div class="notify-message">{{ review.content }}</div>
                 <el-button size="small" text type="primary" @click="viewCourseById(review.course_id)">
-                  查看课程
+                  {{ t('notification.viewCourse') }}
                 </el-button>
               </div>
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="沟通" name="chat">
+          <el-tab-pane :label="t('notification.communication')" name="chat">
             <el-alert
-              title="师生沟通入口"
+              :title="t('notification.teacherCommunicationTitle')"
               type="info"
               :closable="false"
               show-icon
-              description="当前系统已支持学习社区聊天室，可与学生实时交流。"
+              :description="t('notification.teacherCommunicationDesc')"
             />
             <el-button type="primary" style="width: 100%; margin-top: 12px;" @click="goToChatRoom">
-              进入学习社区聊天室
+              {{ t('notification.enterChatRoom') }}
             </el-button>
           </el-tab-pane>
         </el-tabs>
@@ -229,6 +239,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
@@ -239,6 +250,15 @@ import {
 
 const router = useRouter()
 const userStore = useUserStore()
+const { t, locale } = useI18n()
+
+const currentLocale = ref(locale.value)
+
+const handleLocaleChange = (lang) => {
+  locale.value = lang
+  currentLocale.value = lang
+  localStorage.setItem('locale', lang)
+}
 const activeMenu = ref('/teacher-home')
 const calendarValue = ref(new Date())
 const notificationDrawerVisible = ref(false)

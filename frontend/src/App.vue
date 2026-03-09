@@ -1,10 +1,11 @@
 <template>
+  <el-config-provider :locale="elLocale">
   <div id="app">
     <el-container class="layout-container">
       <el-header v-if="!route.meta.hideHeader" class="header">
         <div class="logo">
           <el-icon :size="28"><School /></el-icon>
-          <span>校园智慧学习平台</span>
+          <span>{{ t('common.platformTitle') }}</span>
         </div>
         <el-menu
           :default-active="activeIndex"
@@ -14,13 +15,23 @@
           class="nav-menu"
         >
           <el-menu-item v-if="userStore.isLoggedIn && userStore.user" :index="homeRoute">
-            {{ userStore.user.user_type === 'teacher' ? '教师端' : '学生端' }}
+            {{ userStore.user.user_type === 'teacher' ? t('nav.teacherTitle').split(' - ')[1] : t('nav.studentTitle').split(' - ')[1] }}
           </el-menu-item>
-          <el-menu-item index="/ai-tutor">AI学习助手</el-menu-item>
+          <el-menu-item index="/ai-tutor">{{ t('nav.aiTutor') }}</el-menu-item>
         </el-menu>
         <div class="user-area">
+          <el-select
+            v-model="currentLocale"
+            size="small"
+            style="width: 110px; margin-right: 12px;"
+            @change="handleLocaleChange"
+          >
+            <el-option value="zh-cn" :label="t('language.zhCn')" />
+            <el-option value="zh-tw" :label="t('language.zhTw')" />
+            <el-option value="en" :label="t('language.en')" />
+          </el-select>
           <el-button type="primary" @click="router.push('/login')" v-if="!userStore.isLoggedIn">
-            登录
+            {{ t('common.login') }}
           </el-button>
           <el-dropdown v-else>
             <span class="user-info">
@@ -29,8 +40,8 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="router.push('/profile')">个人中心</el-dropdown-item>
-                <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
+                <el-dropdown-item @click="router.push('/profile')">{{ t('common.profile') }}</el-dropdown-item>
+                <el-dropdown-item @click="handleLogout">{{ t('common.logout') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -46,20 +57,38 @@
       </el-main>
       
       <el-footer v-if="!route.meta.hideFooter" class="footer">
-        <p>© 2026 校园智慧学习平台 - 让学习更智能、更高效</p>
+        <p>© 2026 {{ t('common.platformTitle') }}</p>
       </el-footer>
     </el-container>
   </div>
+  </el-config-provider>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { ElConfigProvider } from 'element-plus'
+import elZhCn from 'element-plus/dist/locale/zh-cn.mjs'
+import elZhTw from 'element-plus/dist/locale/zh-tw.mjs'
+import elEn from 'element-plus/dist/locale/en.mjs'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const { t, locale } = useI18n()
+
+const currentLocale = ref(locale.value)
+
+const elLocaleMap = { 'zh-cn': elZhCn, 'zh-tw': elZhTw, 'en': elEn }
+const elLocale = computed(() => elLocaleMap[currentLocale.value] || elZhCn)
+
+const handleLocaleChange = (lang) => {
+  locale.value = lang
+  currentLocale.value = lang
+  localStorage.setItem('locale', lang)
+}
 
 const activeIndex = computed(() => route.path)
 

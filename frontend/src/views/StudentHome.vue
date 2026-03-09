@@ -4,9 +4,19 @@
       <el-header class="header">
         <div class="header-left">
           <el-icon :size="28" color="#333333"><Reading /></el-icon>
-          <h2>校园智慧学习平台 - 学生端</h2>
+          <h2>{{ t('nav.studentTitle') }}</h2>
         </div>
         <div class="header-right">
+          <el-select
+            v-model="currentLocale"
+            size="small"
+            style="width: 110px;"
+            @change="handleLocaleChange"
+          >
+            <el-option value="zh-cn" :label="t('language.zhCn')" />
+            <el-option value="zh-tw" :label="t('language.zhTw')" />
+            <el-option value="en" :label="t('language.en')" />
+          </el-select>
           <el-badge :value="notifications" :hidden="notifications === 0" class="item">
             <el-button text class="notification-btn" @click="openNotificationCenter">
               <el-icon :size="24"><Bell /></el-icon>
@@ -16,7 +26,7 @@
             {{ userStore.user?.username?.charAt(0).toUpperCase() }}
           </el-avatar>
           <span class="username">{{ userStore.user?.username }}</span>
-          <el-button type="danger" size="small" @click="handleLogout">退出</el-button>
+          <el-button type="danger" size="small" @click="handleLogout">{{ t('common.logout') }}</el-button>
         </div>
       </el-header>
 
@@ -25,61 +35,61 @@
           <el-menu :default-active="activeMenu" router>
             <el-menu-item index="/student-home">
               <el-icon><HomeFilled /></el-icon>
-              <span>我的主页</span>
+              <span>{{ t('nav.studentHome') }}</span>
             </el-menu-item>
             <el-menu-item index="/my-learning">
               <el-icon><Reading /></el-icon>
-              <span>我的学习</span>
+              <span>{{ t('nav.myLearning') }}</span>
             </el-menu-item>
             <el-menu-item index="/search-courses">
               <el-icon><Search /></el-icon>
-              <span>搜索课程</span>
+              <span>{{ t('nav.searchCourses') }}</span>
             </el-menu-item>
             <el-menu-item index="/ai-tutor">
               <el-icon><ChatDotRound /></el-icon>
-              <span>AI学习助手</span>
+              <span>{{ t('nav.aiTutor') }}</span>
             </el-menu-item>
             <el-menu-item index="/chat">
               <el-icon><ChatLineRound /></el-icon>
-              <span>师生沟通</span>
+              <span>{{ t('nav.communication') }}</span>
             </el-menu-item>
             <el-menu-item index="/profile">
               <el-icon><User /></el-icon>
-              <span>个人资料</span>
+              <span>{{ t('common.profile') }}</span>
             </el-menu-item>
           </el-menu>
         </el-aside>
 
         <el-main class="main-content">
           <div class="welcome-banner">
-            <h1>欢迎回来，{{ userStore.user?.username }} 同学！</h1>
-            <p>继续你的学习之旅，探索知识的海洋</p>
+            <h1>{{ t('student.welcome', { name: userStore.user?.username }) }}</h1>
+            <p>{{ t('student.subtitle') }}</p>
           </div>
 
           <el-row :gutter="20" class="stats-row">
             <el-col :span="6">
               <el-card class="stat-card">
-                <el-statistic title="学习时长" :value="stats.studyHours">
-                  <template #suffix>小时</template>
+                <el-statistic :title="t('student.stats.studyHours')" :value="stats.studyHours">
+                  <template #suffix>{{ t('student.stats.hours') }}</template>
                 </el-statistic>
               </el-card>
             </el-col>
             <el-col :span="6">
               <el-card class="stat-card">
-                <el-statistic title="已学课程" :value="stats.coursesCompleted">
-                  <template #suffix>门</template>
+                <el-statistic :title="t('student.stats.coursesCompleted')" :value="stats.coursesCompleted">
+                  <template #suffix>{{ t('student.stats.courses') }}</template>
                 </el-statistic>
               </el-card>
             </el-col>
             <el-col :span="6">
               <el-card class="stat-card">
-                <el-statistic title="学习积分" :value="stats.points" />
+                <el-statistic :title="t('student.stats.points')" :value="stats.points" />
               </el-card>
             </el-col>
             <el-col :span="6">
               <el-card class="stat-card">
-                <el-statistic title="学习排名" :value="stats.rank">
-                  <template #suffix>名</template>
+                <el-statistic :title="t('student.stats.rank')" :value="stats.rank">
+                  <template #suffix>{{ t('student.stats.rankSuffix') }}</template>
                 </el-statistic>
               </el-card>
             </el-col>
@@ -90,11 +100,11 @@
               <el-card class="section-card">
                 <template #header>
                   <div class="card-header">
-                    <span>继续学习</span>
+                    <span>{{ t('student.sections.continueLearning') }}</span>
                   </div>
                 </template>
                 <div class="course-list">
-                  <el-empty v-if="!recentCourses.length" description="暂无进行中的课程" />
+                  <el-empty v-if="!recentCourses.length" :description="t('student.sections.noCourses')" />
                   <div v-for="course in recentCourses" :key="course.id" class="course-item">
                     <el-avatar shape="square" :size="80" :src="course.image">{{ course.title }}</el-avatar>
                     <div class="course-info">
@@ -102,7 +112,7 @@
                       <p>{{ course.instructor }}</p>
                       <el-progress :percentage="course.progress" />
                     </div>
-                    <el-button type="primary" @click="continueLearning(course)">继续学习</el-button>
+                    <el-button type="primary" @click="continueLearning(course)">{{ t('student.buttons.continueLearning') }}</el-button>
                   </div>
                 </div>
               </el-card>
@@ -110,11 +120,11 @@
               <el-card class="section-card" style="margin-top: 20px;">
                 <template #header>
                   <div class="card-header">
-                    <span>推荐课程</span>
+                    <span>{{ t('student.sections.recommendedCourses') }}</span>
                   </div>
                 </template>
                 <div class="recommended-courses">
-                  <el-empty v-if="!recommendedCourses.length" description="暂无推荐课程" />
+                  <el-empty v-if="!recommendedCourses.length" :description="t('student.sections.noRecommended')" />
                   <el-row :gutter="20">
                     <el-col :span="12" v-for="course in recommendedCourses" :key="course.id">
                       <el-card class="course-card" shadow="hover">
@@ -122,11 +132,11 @@
                         <h4>{{ course.title }}</h4>
                         <p class="course-meta">
                           <el-icon><User /></el-icon> {{ course.instructor }}
-                          <el-icon style="margin-left: 10px;"><Clock /></el-icon> {{ course.duration }}小时
+                          <el-icon style="margin-left: 10px;"><Clock /></el-icon> {{ course.duration }}{{ t('student.stats.hours') }}
                         </p>
                         <div class="course-footer">
                           <el-rate v-model="course.rating" disabled show-score />
-                          <el-button type="primary" size="small">开始学习</el-button>
+                          <el-button type="primary" size="small">{{ t('student.buttons.startLearning') }}</el-button>
                         </div>
                       </el-card>
                     </el-col>
@@ -139,9 +149,9 @@
               <el-card class="section-card">
                 <template #header>
                   <div class="card-header">
-                    <span>学习日历</span>
+                    <span>{{ t('student.sections.studyCalendar') }}</span>
                     <el-badge v-if="pendingQuizzes.length" :value="pendingQuizzes.length" type="danger">
-                      <span style="font-size:12px;color:#F56C6C;">未完成Quiz</span>
+                      <span style="font-size:12px;color:#F56C6C;">{{ t('student.sections.pendingQuizzes') }}</span>
                     </el-badge>
                   </div>
                 </template>
@@ -169,7 +179,7 @@
               <el-card class="section-card" style="margin-top: 20px;">
                 <template #header>
                   <div class="card-header">
-                    <span>最近动态</span>
+                    <span>{{ t('student.sections.recentActivities') }}</span>
                   </div>
                 </template>
                 <el-timeline>
@@ -187,11 +197,11 @@
         </el-main>
       </el-container>
 
-      <el-drawer v-model="notificationDrawerVisible" title="通知中心" size="420px">
+      <el-drawer v-model="notificationDrawerVisible" :title="t('notification.center')" size="420px">
         <el-tabs>
-          <el-tab-pane :label="`系统通知 (${pendingQuizzes.length + courseNotifications.length})`" name="system">
+          <el-tab-pane :label="`${t('notification.systemNotifications')} (${pendingQuizzes.length + courseNotifications.length})`" name="system">
             <div v-if="!pendingQuizzes.length && !courseNotifications.length" style="text-align: center; padding: 20px; color: #909399;">
-              <el-empty description="暂无新通知" />
+              <el-empty :description="t('notification.noNotifications')" />
             </div>
             <div v-else class="notify-list">
               <!-- 待完成Quiz -->
@@ -200,9 +210,9 @@
                   <el-tag type="danger" size="small">Quiz</el-tag>
                   {{ quiz.title }}
                 </div>
-                <div class="notify-meta">截止时间：{{ formatNotifyTime(quiz.end_time) }}</div>
+                <div class="notify-meta">{{ t('notification.deadline') }}{{ formatNotifyTime(quiz.end_time) }}</div>
                 <el-button size="small" type="primary" text @click="goToQuiz(quiz.share_code)">
-                  去完成
+                  {{ t('notification.goComplete') }}
                 </el-button>
               </div>
               
@@ -210,51 +220,51 @@
               <div v-for="notice in courseNotifications" :key="`course-${notice.id}`" class="notify-item">
                 <div class="notify-title">
                   <el-tag :type="notice.type === 'new_material' ? 'success' : 'info'" size="small">
-                    {{ notice.type === 'new_material' ? '新资料' : '课程通知' }}
+                    {{ notice.type === 'new_material' ? t('notification.newMaterial') : t('notification.courseNotification') }}
                   </el-tag>
                   {{ notice.title }}
                 </div>
                 <div class="notify-meta">{{ formatNotifyTime(notice.created_at) }}</div>
                 <el-button size="small" type="primary" text @click="viewCourse(notice.course_id)">
-                  查看课程
+                  {{ t('notification.viewCourse') }}
                 </el-button>
               </div>
             </div>
           </el-tab-pane>
 
-          <el-tab-pane :label="`私信 (${totalUnreadMessages})`" name="messages">
+          <el-tab-pane :label="`${t('notification.messages')} (${totalUnreadMessages})`" name="messages">
             <div v-if="!unreadConversations.length" style="text-align: center; padding: 20px; color: #909399;">
-              <el-empty description="暂无未读私信" />
+              <el-empty :description="t('notification.noMessages')" />
             </div>
             <div v-else class="notify-list">
               <div v-for="conv in unreadConversations" :key="`msg-${conv.user.id}`" class="notify-item">
                 <div class="notify-title">
-                  来自 <el-tag type="info" size="small">{{ conv.user.user_type === 'teacher' ? '教师' : '学生' }}</el-tag>
+                  {{ t('notification.from') }} <el-tag type="info" size="small">{{ conv.user.user_type === 'teacher' ? t('nav.teacherHome') : t('nav.studentHome') }}</el-tag>
                   {{ conv.user.username }}
                 </div>
                 <div class="notify-meta">
                   <el-badge :value="conv.unread_count" class="item" style="margin-right: 8px;">
-                    <span style="color: #909399;">未读消息</span>
+                    <span style="color: #909399;">{{ t('notification.unreadMessages') }}</span>
                   </el-badge>
                 </div>
                 <div class="notify-message" style="margin-bottom: 10px; color: #606266;">{{ conv.last_message }}</div>
                 <el-button size="small" type="primary" text @click="goToPrivateChat(conv.user.id)">
-                  查看私信
+                  {{ t('notification.viewMessage') }}
                 </el-button>
               </div>
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="聊天室" name="chat">
+          <el-tab-pane :label="t('notification.chatRoom')" name="chat">
             <el-alert
-              title="学习社区聊天室"
+              :title="t('notification.communityChat')"
               type="info"
               :closable="false"
               show-icon
-              description="进入学习社区聊天室与教师和同学进行实时交流。"
+              :description="t('notification.communityChatDesc')"
             />
             <el-button type="primary" style="width: 100%; margin-top: 12px;" @click="goToChatRoom">
-              进入学习社区聊天室
+              {{ t('notification.enterChatRoom') }}
             </el-button>
           </el-tab-pane>
         </el-tabs>
@@ -266,6 +276,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
@@ -275,6 +286,15 @@ import {
 
 const router = useRouter()
 const userStore = useUserStore()
+const { t, locale } = useI18n()
+
+const currentLocale = ref(locale.value)
+
+const handleLocaleChange = (lang) => {
+  locale.value = lang
+  currentLocale.value = lang
+  localStorage.setItem('locale', lang)
+}
 const activeMenu = ref('/student-home')
 const calendarValue = ref(new Date())
 const notificationDrawerVisible = ref(false)
