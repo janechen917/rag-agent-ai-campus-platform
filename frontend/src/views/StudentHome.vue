@@ -7,6 +7,11 @@
           <h2>校园智慧学习平台 - 学生端</h2>
         </div>
         <div class="header-right">
+          <el-badge :value="notifications" :hidden="notifications === 0" class="item">
+            <el-button text class="notification-btn" @click="openNotificationCenter">
+              <el-icon :size="24"><Bell /></el-icon>
+            </el-button>
+          </el-badge>
           <el-avatar :size="40" :src="userStore.user?.profile?.avatar">
             {{ userStore.user?.username?.charAt(0).toUpperCase() }}
           </el-avatar>
@@ -33,6 +38,10 @@
             <el-menu-item index="/ai-tutor">
               <el-icon><ChatDotRound /></el-icon>
               <span>AI学习助手</span>
+            </el-menu-item>
+            <el-menu-item index="/chat">
+              <el-icon><ChatLineRound /></el-icon>
+              <span>师生沟通</span>
             </el-menu-item>
             <el-menu-item index="/profile">
               <el-icon><User /></el-icon>
@@ -177,6 +186,79 @@
           </el-row>
         </el-main>
       </el-container>
+
+      <el-drawer v-model="notificationDrawerVisible" title="通知中心" size="420px">
+        <el-tabs>
+          <el-tab-pane :label="`系统通知 (${pendingQuizzes.length + courseNotifications.length})`" name="system">
+            <div v-if="!pendingQuizzes.length && !courseNotifications.length" style="text-align: center; padding: 20px; color: #909399;">
+              <el-empty description="暂无新通知" />
+            </div>
+            <div v-else class="notify-list">
+              <!-- 待完成Quiz -->
+              <div v-for="quiz in pendingQuizzes" :key="`quiz-${quiz.id}`" class="notify-item">
+                <div class="notify-title">
+                  <el-tag type="danger" size="small">Quiz</el-tag>
+                  {{ quiz.title }}
+                </div>
+                <div class="notify-meta">截止时间：{{ formatNotifyTime(quiz.end_time) }}</div>
+                <el-button size="small" type="primary" text @click="goToQuiz(quiz.share_code)">
+                  去完成
+                </el-button>
+              </div>
+              
+              <!-- 课程通知 -->
+              <div v-for="notice in courseNotifications" :key="`course-${notice.id}`" class="notify-item">
+                <div class="notify-title">
+                  <el-tag :type="notice.type === 'new_material' ? 'success' : 'info'" size="small">
+                    {{ notice.type === 'new_material' ? '新资料' : '课程通知' }}
+                  </el-tag>
+                  {{ notice.title }}
+                </div>
+                <div class="notify-meta">{{ formatNotifyTime(notice.created_at) }}</div>
+                <el-button size="small" type="primary" text @click="viewCourse(notice.course_id)">
+                  查看课程
+                </el-button>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane :label="`私信 (${totalUnreadMessages})`" name="messages">
+            <div v-if="!unreadConversations.length" style="text-align: center; padding: 20px; color: #909399;">
+              <el-empty description="暂无未读私信" />
+            </div>
+            <div v-else class="notify-list">
+              <div v-for="conv in unreadConversations" :key="`msg-${conv.user.id}`" class="notify-item">
+                <div class="notify-title">
+                  来自 <el-tag type="info" size="small">{{ conv.user.user_type === 'teacher' ? '教师' : '学生' }}</el-tag>
+                  {{ conv.user.username }}
+                </div>
+                <div class="notify-meta">
+                  <el-badge :value="conv.unread_count" class="item" style="margin-right: 8px;">
+                    <span style="color: #909399;">未读消息</span>
+                  </el-badge>
+                </div>
+                <div class="notify-message" style="margin-bottom: 10px; color: #606266;">{{ conv.last_message }}</div>
+                <el-button size="small" type="primary" text @click="goToPrivateChat(conv.user.id)">
+                  查看私信
+                </el-button>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="聊天室" name="chat">
+            <el-alert
+              title="学习社区聊天室"
+              type="info"
+              :closable="false"
+              show-icon
+              description="进入学习社区聊天室与教师和同学进行实时交流。"
+            />
+            <el-button type="primary" style="width: 100%; margin-top: 12px;" @click="goToChatRoom">
+              进入学习社区聊天室
+            </el-button>
+          </el-tab-pane>
+        </el-tabs>
+      </el-drawer>
     </el-container>
   </div>
 </template>
@@ -188,13 +270,30 @@ import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 import { 
-  Reading, HomeFilled, ChatDotRound, ChatLineRound, User, Clock, Search
+  Reading, HomeFilled, ChatDotRound, ChatLineRound, User, Clock, Search, Bell
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const activeMenu = ref('/student-home')
 const calendarValue = ref(new Date())
+const notificationDrawerVisible = ref(false)
+
+// 系统通知数据
+const pendingQuizzes = ref([])
+const courseNotifications = ref([])
+const unreadConversations = ref([])
+
+const totalUnreadMessages = computed(() => {
+  return unreadConversations.value.reduce((total, conv) => total + (conv.unread_count || 0), 0)
+})
+
+const notifications = computed(() => {
+  const quizCount = pendingQuizzes.value.length
+  const courseCount = courseNotifications.value.length
+  const messageCount = unreadConversations.value.reduce((total, conv) => total + (conv.unread_count || 0), 0)
+  return quizCount + courseCount + messageCount
+})
 
 const stats = ref({
   studyHours: 0,
@@ -210,9 +309,6 @@ const recentActivities = ref([
   { id: 2, time: '2024-02-27 10:30', content: '参与了Python学习讨论' },
   { id: 3, time: '2024-02-26 16:20', content: '获得了"勤奋学习"徽章' },
 ])
-
-// 待完成 Quiz 数据
-const pendingQuizzes = ref([])
 
 // 按日期索引 Quiz（key: 'YYYY-MM-DD'）
 const quizDDLMap = computed(() => {
@@ -235,6 +331,18 @@ const formatDateTime = (isoStr) => {
   return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+const formatNotifyTime = (value) => {
+  if (!value) return '刚刚'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '刚刚'
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
 const handleDateClick = (day) => {
   const quizzes = getQuizzesForDate(day)
   if (quizzes.length > 0) {
@@ -246,12 +354,58 @@ const goToQuiz = (shareCode) => {
   router.push(`/quiz/${shareCode}`)
 }
 
+const openNotificationCenter = () => {
+  notificationDrawerVisible.value = true
+}
+
+const goToChatRoom = () => {
+  notificationDrawerVisible.value = false
+  router.push('/chat')
+}
+
+const viewCourse = (courseId) => {
+  notificationDrawerVisible.value = false
+  router.push(`/course/${courseId}`)
+}
+
+const goToPrivateChat = (userId) => {
+  notificationDrawerVisible.value = false
+  router.push('/chat')
+  // 使用setTimeout确保页面加载后再设置用户ID
+  setTimeout(() => {
+    // 这里会在Chat.vue中被处理
+  }, 100)
+}
+
 const fetchPendingQuizzes = async () => {
   try {
     const res = await api.get('/api/ai/quiz/pending/')
     pendingQuizzes.value = res.data || []
   } catch (e) {
     console.error('获取待完成Quiz失败:', e)
+  }
+}
+
+const loadCourseNotifications = async () => {
+  try {
+    // 这里可以调用后端API来获取课程通知
+    // 暂时为空，等待后端实现相关端点
+    courseNotifications.value = []
+  } catch (e) {
+    console.error('加载课程通知失败:', e)
+    courseNotifications.value = []
+  }
+}
+
+const loadUnreadMessages = async () => {
+  try {
+    const res = await api.get('/api/chat/messages/conversations/')
+    const allConversations = Array.isArray(res.data) ? res.data : []
+    // 只保留有未读消息的对话
+    unreadConversations.value = allConversations.filter(conv => conv.unread_count > 0)
+  } catch (e) {
+    console.error('加载未读消息失败:', e)
+    unreadConversations.value = []
   }
 }
 
@@ -265,8 +419,12 @@ const continueLearning = (course) => {
   router.push(`/course/${course.id}`)
 }
 
-onMounted(() => {
-  fetchPendingQuizzes()
+onMounted(async () => {
+  await Promise.all([
+    fetchPendingQuizzes(),
+    loadCourseNotifications(),
+    loadUnreadMessages()
+  ])
 })
 </script>
 
@@ -303,8 +461,50 @@ onMounted(() => {
   gap: 15px;
 }
 
+.notification-btn {
+  padding: 0;
+}
+
 .username {
   font-weight: 500;
+}
+
+.notify-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.notify-item {
+  padding: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.notify-title {
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notify-meta {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 10px;
+}
+
+.notify-message {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.5;
+  word-break: break-all;
+  max-height: 50px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar {

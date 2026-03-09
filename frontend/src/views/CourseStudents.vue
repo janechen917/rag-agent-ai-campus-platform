@@ -15,10 +15,37 @@
 
     <!-- 学生统计 -->
     <el-row :gutter="20" class="stats-row">
-      <el-col :span="24">
+      <el-col :span="6">
         <el-card class="stat-card">
           <el-statistic title="学生总数" :value="students.length">
             <template #suffix>人</template>
+          </el-statistic>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card class="stat-card">
+          <el-statistic title="平均进度" :value="averageProgress" :precision="1">
+            <template #suffix>%</template>
+          </el-statistic>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card class="stat-card excellent-card">
+          <el-statistic title="优秀学生" :value="excellentStudents">
+            <template #suffix>人</template>
+            <template #prefix>
+              <el-icon color="#67C23A"><TrophyBase /></el-icon>
+            </template>
+          </el-statistic>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card class="stat-card attention-card">
+          <el-statistic title="需关注" :value="needAttentionStudents">
+            <template #suffix>人</template>
+            <template #prefix>
+              <el-icon color="#F56C6C"><Warning /></el-icon>
+            </template>
           </el-statistic>
         </el-card>
       </el-col>
@@ -63,14 +90,37 @@
           </template>
         </el-table-column>
 
+        <el-table-column prop="progress" label="学习进度" width="200" sortable>
+          <template #default="scope">
+            <div class="progress-wrapper">
+              <el-progress 
+                :percentage="scope.row.progress || 0" 
+                :color="getProgressColor(scope.row.progress)"
+                :stroke-width="12"
+              />
+              <el-tag 
+                :type="getProgressTag(scope.row.progress)" 
+                size="small" 
+                style="margin-left: 10px;"
+              >
+                {{ getProgressLabel(scope.row.progress) }}
+              </el-tag>
+            </div>
+          </template>
+        </el-table-column>
 
-
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="scope">
             <el-button size="small" @click="viewStudentProgress(scope.row)">
               详细信息
-            </el-button>
-            <el-popconfirm
+            </el-button>            <el-button 
+              size="small" 
+              type="primary" 
+              :icon="ChatLineRound"
+              @click="sendMessage(scope.row.student)"
+            >
+              发私信
+            </el-button>            <el-popconfirm
               title="确定移除该学生吗？"
               @confirm="removeStudent(scope.row)"
             >
@@ -129,7 +179,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ArrowLeft, User, Refresh
+  ArrowLeft, User, Refresh, ChatLineRound, TrophyBase, Warning
 } from '@element-plus/icons-vue'
 import api from '@/api'
 
@@ -145,6 +195,23 @@ const selectedStudent = ref(null)
 // 计算属性
 const filteredStudents = computed(() => {
   return students.value
+})
+
+// 计算平均进度
+const averageProgress = computed(() => {
+  if (students.value.length === 0) return 0
+  const total = students.value.reduce((sum, student) => sum + (student.progress || 0), 0)
+  return total / students.value.length
+})
+
+// 优秀学生数量（进度>=80%）
+const excellentStudents = computed(() => {
+  return students.value.filter(s => (s.progress || 0) >= 80).length
+})
+
+// 需关注学生数量（进度<20%）
+const needAttentionStudents = computed(() => {
+  return students.value.filter(s => (s.progress || 0) < 20).length
 })
 
 
@@ -207,7 +274,39 @@ const handleSortChange = ({ prop, order }) => {
   console.log('排序:', prop, order)
 }
 
+// 快速发送私信
+const sendMessage = (student) => {
+  // 跳转到聊天页面，并通过query参数传递学生ID
+  router.push({
+    path: '/chat',
+    query: { userId: student.id, userName: student.username }
+  })
+  ElMessage.success(`正在打开与 ${student.username} 的私信...`)
+}
 
+// 获取进度颜色
+const getProgressColor = (progress) => {
+  if (progress >= 80) return '#67C23A' // 绿色
+  if (progress >= 50) return '#409EFF' // 蓝色
+  if (progress >= 20) return '#E6A23C' // 橙色
+  return '#F56C6C' // 红色
+}
+
+// 获取进度标签类型
+const getProgressTag = (progress) => {
+  if (progress >= 80) return 'success'
+  if (progress >= 50) return ''
+  if (progress >= 20) return 'warning'
+  return 'danger'
+}
+
+// 获取进度标签文字
+const getProgressLabel = (progress) => {
+  if (progress >= 80) return '优秀'
+  if (progress >= 50) return '良好'
+  if (progress >= 20) return '一般'
+  return '需关注'
+}
 
 // 格式化日期
 const formatDate = (dateString) => {
@@ -288,7 +387,18 @@ onMounted(async () => {
   color: #909399;
 }
 
+.progress-wrapper {
+  display: flex;
+  align-items: center;
+}
 
+.excellent-card {
+  border-left: 4px solid #67C23A;
+}
+
+.attention-card {
+  border-left: 4px solid #F56C6C;
+}
 
 .student-detail .student-header {
   display: flex;

@@ -18,13 +18,13 @@ const routes = [
     path: '/student-home',
     name: 'StudentHome',
     component: () => import('@/views/StudentHome.vue'),
-    meta: { title: '学生端首页', requiresAuth: true, requiresRole: 'student' }
+    meta: { title: '学生端首页', requiresAuth: true, requiresRole: 'student', hideHeader: true, hideFooter: true }
   },
   {
     path: '/teacher-home',
     name: 'TeacherHome',
     component: () => import('@/views/TeacherHome.vue'),
-    meta: { title: '教师端首页', requiresAuth: true, requiresRole: 'teacher' }
+    meta: { title: '教师端首页', requiresAuth: true, requiresRole: 'teacher', hideHeader: true, hideFooter: true }
   },
   {
     path: '/create-course',
@@ -57,10 +57,16 @@ const routes = [
     meta: { title: '课程申请管理', requiresAuth: true, requiresRole: 'teacher' }
   },
   {
+    path: '/students',
+    name: 'StudentsManagement',
+    component: () => import('@/views/StudentsManagement.vue'),
+    meta: { title: '学生管理', requiresAuth: true, requiresRole: 'teacher' }
+  },
+  {
     path: '/analytics',
     name: 'DataAnalysis',
     component: () => import('@/views/DataAnalysis.vue'),
-    meta: { title: '数据分析', requiresAuth: true, requiresRole: 'teacher' }
+    meta: { title: '数据分析', requiresAuth: true, requiresRole: 'teacher', hideHeader: true, hideFooter: true }
   },
   {
     path: '/course/:id',

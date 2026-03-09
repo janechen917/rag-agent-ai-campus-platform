@@ -8,7 +8,7 @@
         <el-row :gutter="20" v-else>
           <el-col :span="8" v-for="enrollment in learningCourses" :key="enrollment.id">
             <el-card class="course-card" shadow="hover" @click="continueLearning(enrollment.course.id)">
-              <img :src="enrollment.course.image || 'https://via.placeholder.com/300x180/409EFF/FFFFFF?text=Course'" class="course-image" />
+              <img :src="getCourseImage(enrollment.course)" class="course-image" />
               <div class="course-info">
                 <h3>{{ enrollment.course.title }}</h3>
                 <div class="progress-section">
@@ -36,7 +36,7 @@
           <el-col :span="8" v-for="enrollment in completedCourses" :key="enrollment.id">
             <el-card class="course-card" shadow="hover">
               <el-tag type="success" class="completed-badge">已完成</el-tag>
-              <img :src="enrollment.course.image || 'https://via.placeholder.com/300x180/67C23A/FFFFFF?text=Completed'" class="course-image" />
+              <img :src="getCourseImage(enrollment.course)" class="course-image" />
               <div class="course-info">
                 <h3>{{ enrollment.course.title }}</h3>
                 <div class="completion-info">
@@ -122,6 +122,12 @@ const fetchEnrollments = async () => {
     const response = await api.get('/api/courses/course-enrollments/')
     // API返回分页格式，需要使用results字段
     enrollments.value = response.data.results || response.data || []
+    
+    // 调试：查看第一个课程的image字段
+    if (enrollments.value.length > 0) {
+      console.log('第一个课程数据:', enrollments.value[0].course)
+      console.log('课程封面URL:', enrollments.value[0].course?.image)
+    }
   } catch (error) {
     console.error('获取选课记录失败:', error)
     ElMessage.error('获取课程数据失败')
@@ -134,6 +140,23 @@ const formatDate = (dateString) => {
   if (!dateString) return ''
   const date = new Date(dateString)
   return date.toLocaleDateString('zh-CN')
+}
+
+const getCourseImage = (course) => {
+  if (!course || !course.image) {
+    return 'https://via.placeholder.com/300x180/409EFF/FFFFFF?text=Course'
+  }
+  
+  // 如果是完整的URL（http或https开头），直接返回
+  if (course.image.startsWith('http://') || course.image.startsWith('https://')) {
+    return course.image
+  }
+  
+  // 如果是相对路径，确保以/开头
+  const imagePath = course.image.startsWith('/') ? course.image : `/${course.image}`
+  
+  // 返回相对路径，让浏览器自动使用当前域名
+  return imagePath
 }
 
 const continueLearning = (courseId) => {

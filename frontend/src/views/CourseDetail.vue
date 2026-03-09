@@ -126,9 +126,23 @@
           <el-card class="purchase-card">
             <img :src="courseImage" class="preview-image" />
 
-            <el-button type="primary" size="large" style="width: 100%; margin-bottom: 10px">
+            <el-button 
+              v-if="!isInstructor" 
+              type="primary" 
+              size="large" 
+              style="width: 100%; margin-bottom: 10px"
+            >
               申请选课
             </el-button>
+
+            <el-alert
+              v-else
+              title="您是该课程的讲师"
+              type="success"
+              :closable="false"
+              show-icon
+              style="margin-bottom: 10px;"
+            />
 
             <div class="features">
               <div class="feature-item">
