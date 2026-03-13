@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/api'
+import websocketService from '@/api/websocket'
 
 export const useUserStore = defineStore('user', () => {
   const user = ref(null)
@@ -68,6 +69,7 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const logout = () => {
+    websocketService.disconnect()
     setToken(null)
     setUser(null)
   }

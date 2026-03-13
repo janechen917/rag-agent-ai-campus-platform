@@ -218,14 +218,20 @@
             </div>
           </el-tab-pane>
 
-          <el-tab-pane :label="t('notification.communication')" name="chat">
-            <el-alert
-              :title="t('notification.teacherCommunicationTitle')"
-              type="info"
-              :closable="false"
-              show-icon
-              :description="t('notification.teacherCommunicationDesc')"
-            />
+          <el-tab-pane :label="`${t('notification.communication')} (${totalUnreadMessages})`" name="chat">
+            <el-empty v-if="!unreadConversations.length" :description="t('notification.noUnreadMessages', '暂无未读私信')" />
+            <div v-else class="notify-list">
+              <div v-for="conversation in unreadConversations" :key="conversation.user.id" class="notify-item">
+                <div class="notify-title">
+                  {{ conversation.user.username }} {{ t('notification.sentUnreadMessages', { count: conversation.unread_count }) || `发来了 ${conversation.unread_count} 条未读消息` }}
+                </div>
+                <div class="notify-meta">{{ formatNotifyTime(conversation.last_message_at) }}</div>
+                <div class="notify-message">{{ conversation.last_message }}</div>
+                <el-button size="small" text type="primary" @click="goToPrivateChat(conversation.user.id)">
+                  {{ t('notification.viewConversation', '查看会话') }}
+                </el-button>
+              </div>
+            </div>
             <el-button type="primary" style="width: 100%; margin-top: 12px;" @click="goToChatRoom">
               {{ t('notification.enterChatRoom') }}
             </el-button>
@@ -237,12 +243,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
+import websocketService from '@/api/websocket'
 import { 
   Reading, HomeFilled, ChatDotRound, ChatLineRound, User, 
   Plus, DataAnalysis, Bell, Document
@@ -264,8 +271,15 @@ const calendarValue = ref(new Date())
 const notificationDrawerVisible = ref(false)
 const pendingRequests = ref([])
 const recentReviews = ref([])
+const unreadConversations = ref([])
 
-const notifications = computed(() => pendingRequests.value.length + recentReviews.value.length)
+const totalUnreadMessages = computed(() => {
+  return unreadConversations.value.reduce((total, conversation) => total + (conversation.unread_count || 0), 0)
+})
+
+const notifications = computed(() => {
+  return pendingRequests.value.length + recentReviews.value.length + totalUnreadMessages.value
+})
 
 const stats = ref({
   totalCourses: 0,
@@ -300,6 +314,14 @@ const goToCourseRequests = () => {
 const goToChatRoom = () => {
   notificationDrawerVisible.value = false
   router.push('/chat')
+}
+
+const goToPrivateChat = (userId) => {
+  notificationDrawerVisible.value = false
+  router.push({
+    path: '/chat',
+    query: { userId: String(userId) }
+  })
 }
 
 const viewCourseById = (courseId) => {
@@ -393,9 +415,43 @@ const loadNotifications = async (teacherCourses) => {
   }
 }
 
+const loadUnreadMessages = async () => {
+  try {
+    const res = await api.get('/api/chat/messages/conversations/')
+    const conversations = Array.isArray(res.data) ? res.data : []
+    unreadConversations.value = conversations.filter((conversation) => conversation.unread_count > 0)
+  } catch (error) {
+    console.error('加载未读私信失败:', error)
+    unreadConversations.value = []
+  }
+}
+
+const handleWebSocketMessage = (data) => {
+  if (['connection_established', 'private_message', 'private_read'].includes(data.type)) {
+    loadUnreadMessages()
+  }
+}
+
 onMounted(async () => {
   const courses = await loadMyCourses()
-  await loadNotifications(courses)
+  await Promise.all([
+    loadNotifications(courses),
+    loadUnreadMessages()
+  ])
+
+  const token = userStore.token
+  if (!token) return
+
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const defaultWsUrl = `${protocol}://${window.location.host}/ws/chat/`
+  const wsUrl = import.meta.env.VITE_WS_URL || defaultWsUrl
+
+  websocketService.connect(wsUrl, token)
+  websocketService.onMessage(handleWebSocketMessage)
+})
+
+onUnmounted(() => {
+  websocketService.removeMessageHandler(handleWebSocketMessage)
 })
 </script>
 

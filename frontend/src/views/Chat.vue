@@ -131,17 +131,6 @@
           <el-icon class="is-loading"><Loading /></el-icon>
           <span>正在连接...</span>
         </div>
-
-        <div class="queue-panel" v-if="outgoingQueue.length">
-          <div class="queue-title">消息队列</div>
-          <div class="queue-list">
-            <div v-for="item in outgoingQueue" :key="item.clientMessageId" class="queue-item">
-              <el-tag size="small" :type="queueTagType(item.status)">{{ queueStatusLabel(item.status) }}</el-tag>
-              <span class="queue-target">{{ item.target }}</span>
-              <span class="queue-content">{{ item.content }}</span>
-            </div>
-          </div>
-        </div>
       </div>
     </el-card>
   </div>
@@ -149,6 +138,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ChatDotRound, User, UserFilled, Promotion, Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -156,6 +146,7 @@ import websocketService from '@/api/websocket'
 import api from '@/api'
 
 const userStore = useUserStore()
+const route = useRoute()
 
 const activeTab = ref('private')
 const newMessage = ref('')
@@ -174,6 +165,7 @@ const contacts = ref([])
 const selectedUserId = ref(null)
 const privateMessagesMap = ref({})
 const outgoingQueue = ref([])
+const messageTimeoutHandles = new Map()
 
 const selectedUser = computed(() => contacts.value.find((u) => u.id === selectedUserId.value) || null)
 const currentPrivateMessages = computed(() => privateMessagesMap.value[selectedUserId.value] || [])
@@ -191,18 +183,6 @@ const privateMessageRole = (message) => {
   return selectedUser.value?.user_type === 'teacher' ? 'teacher' : 'student'
 }
 
-const queueStatusLabel = (status) => {
-  if (status === 'sending') return '发送中'
-  if (status === 'sent') return '已发送'
-  return '失败'
-}
-
-const queueTagType = (status) => {
-  if (status === 'sending') return 'warning'
-  if (status === 'sent') return 'success'
-  return 'danger'
-}
-
 const createClientMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
 const pushQueueItem = ({ clientMessageId, target, content }) => {
@@ -214,11 +194,58 @@ const pushQueueItem = ({ clientMessageId, target, content }) => {
     createdAt: Date.now()
   })
   outgoingQueue.value = outgoingQueue.value.slice(0, 20)
+
+  const timeoutId = window.setTimeout(() => {
+    failQueueItem(clientMessageId, `${target}发送失败，请重试`)
+  }, 8000)
+  messageTimeoutHandles.set(clientMessageId, timeoutId)
 }
 
-const updateQueueStatus = (clientMessageId, status) => {
-  const item = outgoingQueue.value.find((x) => x.clientMessageId === clientMessageId)
-  if (item) item.status = status
+const removeQueueItem = (clientMessageId) => {
+  const timeoutId = messageTimeoutHandles.get(clientMessageId)
+  if (timeoutId) {
+    window.clearTimeout(timeoutId)
+    messageTimeoutHandles.delete(clientMessageId)
+  }
+
+  outgoingQueue.value = outgoingQueue.value.filter((item) => item.clientMessageId !== clientMessageId)
+}
+
+const removeTempMessage = (clientMessageId) => {
+  publicMessages.value = publicMessages.value.filter(
+    (message) => !(message.clientMessageId === clientMessageId && String(message.id).startsWith('temp-'))
+  )
+
+  Object.keys(privateMessagesMap.value).forEach((peerId) => {
+    privateMessagesMap.value[peerId] = privateMessagesMap.value[peerId].filter(
+      (message) => !(message.clientMessageId === clientMessageId && String(message.id).startsWith('temp-'))
+    )
+  })
+}
+
+const markQueueItemSent = (clientMessageId) => {
+  removeQueueItem(clientMessageId)
+}
+
+const failQueueItem = (clientMessageId, message = '发送失败，请重试') => {
+  const queueItem = outgoingQueue.value.find((item) => item.clientMessageId === clientMessageId)
+  if (!queueItem) return
+
+  removeQueueItem(clientMessageId)
+  removeTempMessage(clientMessageId)
+  ElMessage.error(message)
+}
+
+const failAllPendingQueueItems = (message = '发送失败，请重试') => {
+  const pendingIds = outgoingQueue.value.map((item) => item.clientMessageId)
+  pendingIds.forEach((clientMessageId) => {
+    removeQueueItem(clientMessageId)
+    removeTempMessage(clientMessageId)
+  })
+
+  if (pendingIds.length) {
+    ElMessage.error(message)
+  }
 }
 
 const formatTime = (timestamp) => {
@@ -328,6 +355,16 @@ const loadContacts = async () => {
   }
 }
 
+const openConversationFromRoute = async () => {
+  const routeUserId = Number(route.query.userId)
+  if (!routeUserId) return
+
+  const targetUser = contacts.value.find((user) => user.id === routeUserId)
+  if (!targetUser) return
+
+  await selectPrivateUser(targetUser)
+}
+
 const selectPrivateUser = async (user) => {
   selectedUserId.value = user.id
   activeTab.value = 'private'
@@ -388,7 +425,7 @@ const sendMessage = () => {
       userId: userStore.user?.id,
       timestamp: Date.now()
     })
-    if (!sent) updateQueueStatus(clientMessageId, 'failed')
+    if (!sent) failQueueItem(clientMessageId, '公共消息发送失败，请重试')
   } else {
     if (!selectedUserId.value) {
       ElMessage.warning('请先选择私信联系人')
@@ -416,7 +453,7 @@ const sendMessage = () => {
       receiverId: selectedUserId.value,
       content,
     })
-    if (!sent) updateQueueStatus(clientMessageId, 'failed')
+    if (!sent) failQueueItem(clientMessageId, `私信 ${peer?.username || ''} 发送失败，请重试`)
   }
 
   newMessage.value = ''
@@ -479,7 +516,7 @@ const handleWebSocketMessage = (data) => {
         publicMessages.value = publicMessages.value.filter(
           (msg) => !(msg.clientMessageId === data.clientMessageId && String(msg.id).startsWith('temp-'))
         )
-        updateQueueStatus(data.clientMessageId, 'sent')
+        markQueueItemSent(data.clientMessageId)
       }
 
       publicMessages.value.push({
@@ -503,7 +540,7 @@ const handleWebSocketMessage = (data) => {
 
     case 'private_message':
       if (data.clientMessageId) {
-        updateQueueStatus(data.clientMessageId, 'sent')
+        markQueueItemSent(data.clientMessageId)
         const peerId = data.sender?.id === userStore.user?.id ? data.receiver?.id : data.sender?.id
         if (peerId && privateMessagesMap.value[peerId]) {
           privateMessagesMap.value[peerId] = privateMessagesMap.value[peerId].filter(
@@ -546,7 +583,7 @@ const handleWebSocketMessage = (data) => {
       break
 
     case 'error':
-      ElMessage.error(data.message || '发送失败')
+      failAllPendingQueueItems(data.message || '发送失败')
       break
 
     default:
@@ -562,6 +599,7 @@ onMounted(async () => {
   }
 
   await Promise.all([loadContacts(), loadUserCourses()])
+  await openConversationFromRoute()
 
   if (userCourses.value.length === 1) {
     selectedCourseId.value = userCourses.value[0].id
@@ -584,6 +622,8 @@ onMounted(async () => {
 
 
 onUnmounted(() => {
+  messageTimeoutHandles.forEach((timeoutId) => window.clearTimeout(timeoutId))
+  messageTimeoutHandles.clear()
   websocketService.removeMessageHandler(handleWebSocketMessage)
   websocketService.disconnect()
 })

@@ -6,15 +6,32 @@ class WebSocketService {
     this.reconnectDelay = 3000
     this.messageHandlers = []
     this.isConnecting = false
+    this.connectionUrl = null
+    this.connectionToken = null
+    this.shouldReconnect = true
   }
 
   connect(url, token) {
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+    const hasActiveConnection = this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
+    const sameConnection = hasActiveConnection && this.connectionUrl === url && this.connectionToken === token
+
+    if (sameConnection) {
       console.log('WebSocket已连接或正在连接')
       return
     }
 
+    if (hasActiveConnection) {
+      console.log('检测到登录身份变化，重建WebSocket连接')
+      this.shouldReconnect = false
+      this.ws.close()
+      this.ws = null
+    }
+
     this.isConnecting = true
+    this.shouldReconnect = true
+    this.reconnectAttempts = 0
+    this.connectionUrl = url
+    this.connectionToken = token
     const wsUrl = `${url}?token=${token}`
     
     try {
@@ -43,7 +60,9 @@ class WebSocketService {
       this.ws.onclose = () => {
         console.log('WebSocket连接关闭')
         this.isConnecting = false
-        this.attemptReconnect(url, token)
+        if (this.shouldReconnect) {
+          this.attemptReconnect(url, token)
+        }
       }
     } catch (error) {
       console.error('创建WebSocket连接失败:', error)
@@ -84,10 +103,14 @@ class WebSocketService {
 
   disconnect() {
     this.reconnectAttempts = this.maxReconnectAttempts // 防止自动重连
+    this.shouldReconnect = false
     if (this.ws) {
       this.ws.close()
       this.ws = null
     }
+    this.connectionUrl = null
+    this.connectionToken = null
+    this.isConnecting = false
   }
 
   isConnected() {
