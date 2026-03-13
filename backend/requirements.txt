@@ -1,6 +1,7 @@
 Django==5.0.1
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
+django-filter==23.5
 channels==4.0.0
 channels-redis==4.2.0
 daphne==4.1.0
@@ -8,6 +9,7 @@ python-dotenv==1.0.0
 PyJWT==2.8.0
 psycopg2-binary==2.9.9
 Pillow==10.2.0
+PyPDF2==3.0.1
 apscheduler==3.10.4
 
 # AI相关（更新版本以兼容最新httpx和修复proxies弃用问题）

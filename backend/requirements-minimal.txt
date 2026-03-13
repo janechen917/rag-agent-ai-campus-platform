@@ -5,7 +5,7 @@
 Django==5.0.1
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
-
+django-filter==23.5
 # WebSocket支持
 channels==4.0.0
 channels-redis==4.2.0
@@ -15,6 +15,7 @@ daphne==4.1.0
 python-dotenv==1.0.0
 PyJWT==2.8.0
 Pillow==10.2.0
+PyPDF2==3.0.1
 redis==5.0.1
 
 # 可选：数据库
