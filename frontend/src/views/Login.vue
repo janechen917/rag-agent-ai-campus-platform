@@ -35,7 +35,7 @@
         <template #header>
           <div class="header">
             <h2>欢迎使用</h2>
-            <p style="color: #909399; font-size: 14px; margin: 5px 0 0 0;">请登录或注册以继续</p>
+            <p class="header-subtitle">请登录或注册以继续</p>
           </div>
         </template>
 
@@ -65,7 +65,6 @@
 
               <el-form-item class="login-options-row">
                 <el-checkbox v-model="loginForm.remember">记住我</el-checkbox>
-                <el-link type="primary" class="forgot-link">忘记密码？</el-link>
               </el-form-item>
 
               <el-form-item>
@@ -126,21 +125,15 @@
             </el-form-item>
 
             <el-form-item prop="userType">
-              <el-select
-                v-model="registerForm.userType"
-                placeholder="请选择身份"
-                size="large"
-                style="width: 100%"
-                :prefix-icon="UserFilled"
-              >
-                <el-option label="👨‍🎓 学生 - 学习课程，使用AI辅导" value="student" />
-                <el-option label="👨‍🏫 教师 - 创建课程，管理内容" value="teacher" />
-              </el-select>
+              <el-radio-group v-model="registerForm.userType" size="large" class="user-type-group">
+                <el-radio-button value="student">👨‍🎓 学生</el-radio-button>
+                <el-radio-button value="teacher">👨‍🏫 教师</el-radio-button>
+              </el-radio-group>
             </el-form-item>
 
             <el-form-item>
               <el-checkbox v-model="registerForm.agree">
-                我已阅读并同意 <el-link type="primary">用户协议</el-link> 和 <el-link type="primary">隐私政策</el-link>
+                我已阅读并同意用户协议和隐私政策
               </el-checkbox>
             </el-form-item>
 
@@ -158,20 +151,6 @@
           </el-form>
         </el-tab-pane>
       </el-tabs>
-
-      <el-divider>或</el-divider>
-
-      <div class="social-login">
-        <el-button circle size="large" title="GitHub登录">
-          <el-icon><Setting /></el-icon>
-        </el-button>
-        <el-button circle size="large" title="Google登录">
-          <el-icon><Setting /></el-icon>
-        </el-button>
-        <el-button circle size="large" title="微信登录">
-          <el-icon><Setting /></el-icon>
-        </el-button>
-      </div>
 
       <div class="quick-info">
         <el-alert
@@ -200,8 +179,7 @@ import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import { 
   User, Lock, Message, Reading, 
-  UserFilled, ChatDotSquare, VideoPlay, 
-  TrophyBase, Setting 
+  ChatDotSquare, VideoPlay, TrophyBase
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -424,6 +402,12 @@ const handleRegister = async () => {
   font-size: 28px;
 }
 
+.header-subtitle {
+  color: #909399;
+  font-size: 14px;
+  margin: 5px 0 0 0;
+}
+
 .login-tabs {
   margin-top: 20px;
 }
@@ -432,19 +416,20 @@ const handleRegister = async () => {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  justify-content: flex-start;
 }
 
-.forgot-link {
-  margin-left: auto;
-}
-
-.social-login {
+.user-type-group {
+  width: 100%;
   display: flex;
-  justify-content: center;
-  gap: 15px;
-  margin-top: 20px;
+}
+
+.user-type-group :deep(.el-radio-button) {
+  flex: 1;
+}
+
+.user-type-group :deep(.el-radio-button__inner) {
+  width: 100%;
 }
 
 .quick-info {
