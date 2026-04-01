@@ -18,12 +18,13 @@ else
     cat /tmp/migrate.log
 fi
 
+PORT_TO_USE="${PORT:-8000}"
 echo ""
-echo "Starting Gunicorn on 0.0.0.0:8000..."
+echo "Starting Gunicorn on 0.0.0.0:${PORT_TO_USE}..."
 echo "=========================================="
 
 exec gunicorn \
-    --bind 0.0.0.0:8000 \
+    --bind "0.0.0.0:${PORT_TO_USE}" \
     --workers 2 \
     --worker-class sync \
     --timeout 120 \

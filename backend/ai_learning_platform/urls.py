@@ -12,6 +12,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # Health check endpoint
+    path('', health_check, name='root_health_check'),
     path('health/', health_check, name='health_check'),
     path('api/health/', health_check, name='api_health_check'),
     
