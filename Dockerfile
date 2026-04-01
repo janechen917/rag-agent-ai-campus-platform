@@ -22,13 +22,14 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # 复制项目文件
 COPY backend/ .
 
+# 复制启动脚本
+COPY backend/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # 创建静态文件目录和媒体目录
 RUN mkdir -p staticfiles media
 
-# 收集静态文件（生产环境非必需，但有助于部署）
-RUN python manage.py collectstatic --noinput 2>/dev/null || true
-
 EXPOSE 8000
 
-# 使用 Gunicorn 作为应用服务器
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8000", "ai_learning_platform.wsgi:application", "--timeout", "300"]
+# 使用启动脚本来运行迁移和启动 Gunicorn
+CMD ["/app/entrypoint.sh"]
