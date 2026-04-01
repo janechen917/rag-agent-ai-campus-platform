@@ -6,9 +6,14 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework.authtoken.views import obtain_auth_token
+from .health import health_check
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    # Health check endpoint
+    path('health/', health_check, name='health_check'),
+    path('api/health/', health_check, name='api_health_check'),
     
     # API endpoints
     path('api/auth/', include('courses.urls.auth_urls')),
