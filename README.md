@@ -2,6 +2,13 @@
 
 一个基于 **Vue 3 + Django REST Framework + AI** 的全栈智能学习管理系统，集课程管理、AI 智能导师、Quiz 自动生成、实时聊天、数据分析于一体，面向教师与学生双角色设计，支持中文简体、中文繁体、英文三语言切换。
 
+## 🌐 线上访问地址（已部署）
+
+- 前端（用户访问入口）：https://groupprojectteam11.vercel.app
+- 后端（API 域名）：https://groupprojectteam11back-production.up.railway.app
+- 后端健康检查：https://groupprojectteam11back-production.up.railway.app/health/
+- API 基础前缀：https://groupprojectteam11back-production.up.railway.app/api/
+
 ---
 
 ## ✨ 功能特性
