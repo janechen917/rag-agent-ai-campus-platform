@@ -17,7 +17,23 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 # 生产环境严格配置
 if not DEBUG:
-    ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost').split(',')
+    raw_hosts = os.getenv('ALLOWED_HOSTS', 'localhost')
+    parsed_hosts = []
+    for host in raw_hosts.split(','):
+        host = host.strip()
+        if not host:
+            continue
+        # Django 支持 .example.com 形式，不支持 *.example.com 形式。
+        if host.startswith('*.'):
+            host = f".{host[2:]}"
+        parsed_hosts.append(host)
+
+    # Railway 自动注入公开域名，确保当前实例域名始终可访问。
+    railway_public_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN', '').strip()
+    if railway_public_domain and railway_public_domain not in parsed_hosts:
+        parsed_hosts.append(railway_public_domain)
+
+    ALLOWED_HOSTS = parsed_hosts or ['localhost']
 else:
     ALLOWED_HOSTS = ['*']  # 开发环境允许所有主机
 
