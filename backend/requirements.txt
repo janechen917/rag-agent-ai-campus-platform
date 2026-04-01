@@ -12,15 +12,17 @@ Pillow==10.2.0
 PyPDF2==3.0.1
 apscheduler==3.10.4
 
-# AI相关（更新版本以兼容最新httpx和修复proxies弃用问题）
+# AI相关（轻量级，使用 API 调用而不是本地模型）
 langchain==1.2.10
 langchain-community==0.4.1
 langchain-openai==1.1.10
-transformers==4.38.0
-torch==2.5.1
-faiss-cpu==1.8.0
-sentence-transformers==2.5.0
 openai==2.26.0
+
+# 本地模型库（可选，仅在需要时安装）
+# transformers==4.38.0
+# torch==2.5.1
+# faiss-cpu==1.8.0
+# sentence-transformers==2.5.0
 
 # 工具
 redis==5.0.1
