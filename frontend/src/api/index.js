@@ -1,8 +1,19 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+// 生产环境使用 VITE_API_BASE_URL 环境变量，开发环境使用 Vite 代理
+const getBaseURL = () => {
+  if (import.meta.env.PROD) {
+    // 生产环境：使用环境变量指定的后端URL
+    return import.meta.env.VITE_API_BASE_URL || '/api'
+  } else {
+    // 开发环境：使用 Vite 代理
+    return ''
+  }
+}
+
 const api = axios.create({
-  baseURL: '',  // 统一走 Vite 代理，避免跨域和端口可见性问题
+  baseURL: getBaseURL(),
   timeout: 300000,  // 300秒，AI Quiz生成需要较长时间
 })
 

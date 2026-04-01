@@ -25,3 +25,10 @@ openai==2.26.0
 # 工具
 redis==5.0.1
 celery==5.3.6
+
+# 生产环境部署
+gunicorn==21.2.0
+whitenoise==6.6.0  # 静态文件服务
+dj-database-url==2.1.0  # DATABASE_URL 解析
+
+

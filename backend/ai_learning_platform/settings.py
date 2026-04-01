@@ -3,6 +3,7 @@ Django settings for ai_learning_platform project.
 """
 
 import os
+import dj_database_url
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -14,7 +15,11 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-in-producti
 
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*']  # 在 Codespaces 环境中允许所有主机
+# 生产环境严格配置
+if not DEBUG:
+    ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost').split(',')
+else:
+    ALLOWED_HOSTS = ['*']  # 开发环境允许所有主机
 
 # Application definition
 INSTALLED_APPS = [
@@ -40,6 +45,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # 静态文件服务（生产环境）
     'corsheaders.middleware.CorsMiddleware',  # CORS必须在CommonMiddleware之前
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -70,13 +76,24 @@ TEMPLATES = [
 WSGI_APPLICATION = 'ai_learning_platform.wsgi.application'
 ASGI_APPLICATION = 'ai_learning_platform.asgi.application'
 
-# Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Database - 支持 DATABASE_URL 环境变量（用于生产部署）
+DATABASE_URL = os.getenv('DATABASE_URL')
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    # 开发环境默认使用 SQLite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Redis配置 (用于Channels和Celery)
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
@@ -149,15 +166,21 @@ REST_FRAMEWORK = {
 }
 
 # CORS配置
-# 开发环境允许所有来源（生产环境应该设置具体域名）
-CORS_ALLOW_ALL_ORIGINS = True  # 在 Codespaces 环境中允许所有来源
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://localhost:3002',  # Codespaces 新端口
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-]
+if DEBUG:
+    # 开发环境允许本地前端
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:3002',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ]
+else:
+    # 生产环境严格配置 - 从环境变量读取
+    CORS_ALLOW_ALL_ORIGINS = False
+    cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000')
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',')]
 
 CORS_ALLOW_CREDENTIALS = True
 
