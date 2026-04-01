@@ -197,3 +197,6 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # Quiz提醒邮件：DDL多少小时前发送提醒（默认24小时）
 QUIZ_REMINDER_HOURS_BEFORE = int(os.getenv('QUIZ_REMINDER_HOURS_BEFORE', 24))
+
+# 前端URL（用于邮件中的答题链接）
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')

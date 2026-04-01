@@ -190,6 +190,7 @@
               <el-button v-if="!quiz.is_published" type="primary" size="small" @click="showPublishDialog(quiz)">发布</el-button>
               <el-button size="small" @click="copyShareLink(quiz)" :disabled="!quiz.is_published">复制链接</el-button>
               <el-button size="small" @click="viewQuizDetail(quiz)">详情</el-button>
+              <el-button v-if="quiz.is_published" size="small" type="warning" @click="sendReminder(quiz)" :loading="quiz._sendingReminder">发送提醒</el-button>
               <el-button size="small" type="danger" @click="deleteQuiz(quiz)">删除</el-button>
             </div>
           </div>
@@ -278,6 +279,7 @@
           <p v-if="currentQuizDetail.share_code && currentQuizDetail.is_published" class="share-info">
             分享码: <el-tag>{{ currentQuizDetail.share_code }}</el-tag>
             <el-button size="small" text @click="copyShareLink(currentQuizDetail)">复制链接</el-button>
+            <el-button size="small" type="warning" @click="sendReminder(currentQuizDetail)" :loading="sendingReminder">发送提醒邮件</el-button>
           </p>
         </div>
 
@@ -514,6 +516,8 @@ const publishDialogVisible = ref(false)
 const publishCourseId = ref(null)
 const publishingQuiz = ref(null)
 const isPublishing = ref(false)
+
+const sendingReminder = ref(false)
 
 const quizTakingVisible = ref(false)
 const currentTakingQuiz = ref(null)
@@ -796,6 +800,21 @@ const copyShareLink = (quiz) => {
   }).catch(() => {
     ElMessage({ message: `分享链接: ${link}`, type: 'info', duration: 5000 })
   })
+}
+
+const sendReminder = async (quiz) => {
+  quiz._sendingReminder = true
+  sendingReminder.value = true
+  try {
+    const res = await api.post(`/api/ai/quiz/${quiz.id}/send-reminders/`)
+    const { sent, skipped, failed } = res.data
+    ElMessage.success(`提醒邮件已发送：成功 ${sent} 人，跳过 ${skipped} 人${failed ? `，失败 ${failed} 人` : ''}`)
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '发送提醒邮件失败')
+  } finally {
+    quiz._sendingReminder = false
+    sendingReminder.value = false
+  }
 }
 
 const deleteQuiz = async (quiz) => {

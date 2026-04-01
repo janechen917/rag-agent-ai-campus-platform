@@ -41,14 +41,15 @@ def send_quiz_reminders():
     total_sent = 0
     total_skipped = 0
 
+    platform_email = settings.EMAIL_HOST_USER
+    if not platform_email:
+        logger.warning('[Quiz提醒] 平台邮箱未配置（EMAIL_HOST_USER），跳过所有提醒。')
+        return
+
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+
     for quiz in upcoming_quizzes:
         if not quiz.course:
-            continue
-
-        # 该教师邮箱（用作发件人）
-        teacher_email = quiz.creator.email or settings.EMAIL_HOST_USER
-        if not teacher_email:
-            logger.warning(f'[Quiz提醒] Quiz({quiz.id}) 教师无邮箱，跳过。')
             continue
 
         # 查找已选该课程的所有学生
@@ -95,7 +96,7 @@ def send_quiz_reminders():
                 f'请在截止时间前完成：\n\n'
                 f'  📝 Quiz 名称：{quiz.title}\n'
                 f'  ⏰ 截止时间：{end_time_str}\n'
-                f'  🔗 答题链接：http://localhost:3000/quiz/{quiz.share_code}\n\n'
+                f'  🔗 答题链接：{frontend_url}/quiz/{quiz.share_code}\n\n'
                 f'请尽快完成，祝学习顺利！\n\n'
                 f'—— {quiz.creator.username} 老师'
             )
@@ -104,7 +105,7 @@ def send_quiz_reminders():
                 send_mail(
                     subject=subject,
                     message=body,
-                    from_email=teacher_email,
+                    from_email=platform_email,
                     recipient_list=[student.email],
                     fail_silently=False,
                 )

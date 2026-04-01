@@ -5,7 +5,8 @@ from .views import (
     ai_chat, ai_chat_with_image, get_recommendations, semantic_search,
     upload_and_generate_quiz, my_quizzes, publish_quiz, quiz_detail,
     quiz_by_share_code, submit_quiz, quiz_submissions, delete_quiz, course_quizzes,
-    quiz_statistics, my_quiz_submissions, teacher_analytics, pending_quizzes
+    quiz_statistics, my_quiz_submissions, teacher_analytics, pending_quizzes,
+    quiz_reminder_logs, send_quiz_reminder_now
 )
 
 router = DefaultRouter()
@@ -37,6 +38,10 @@ urlpatterns = [
 
     # 学生待完成Quiz（日历DDL）
     path('quiz/pending/', pending_quizzes, name='pending_quizzes'),
+
+    # Quiz提醒邮件
+    path('quiz/<int:quiz_id>/reminder-logs/', quiz_reminder_logs, name='quiz_reminder_logs'),
+    path('quiz/<int:quiz_id>/send-reminders/', send_quiz_reminder_now, name='send_quiz_reminder_now'),
 ]
 
 # 手动添加ViewSet的URL，避免格式后缀转换器冲突

@@ -1060,3 +1060,107 @@ def teacher_analytics(request):
         })
 
     return Response({'overview': overview, 'courses': course_data})
+
+
+# ---------- Quiz 邮件提醒 API ----------
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def quiz_reminder_logs(request, quiz_id):
+    """GET /api/ai/quiz/<quiz_id>/reminder-logs/ — 查看该 Quiz 的提醒发送记录"""
+    from .models import QuizReminderLog
+
+    try:
+        quiz = Quiz.objects.get(id=quiz_id, creator=request.user)
+    except Quiz.DoesNotExist:
+        return Response({'error': 'Quiz不存在或无权操作'}, status=404)
+
+    logs = QuizReminderLog.objects.filter(quiz=quiz).select_related('student').order_by('-sent_at')
+    data = [
+        {
+            'student_id': log.student.id,
+            'student_name': log.student.username,
+            'student_email': log.student.email,
+            'sent_at': log.sent_at.isoformat(),
+        }
+        for log in logs
+    ]
+    return Response({'quiz_id': quiz_id, 'quiz_title': quiz.title, 'reminder_logs': data})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_quiz_reminder_now(request, quiz_id):
+    """POST /api/ai/quiz/<quiz_id>/send-reminders/ — 立即向未完成学生发送提醒邮件"""
+    from django.core.mail import send_mail
+    from .models import QuizReminderLog, QuizSubmission
+    from courses.models import Enrollment
+
+    try:
+        quiz = Quiz.objects.get(id=quiz_id, creator=request.user)
+    except Quiz.DoesNotExist:
+        return Response({'error': 'Quiz不存在或无权操作'}, status=404)
+
+    if not quiz.is_published:
+        return Response({'error': 'Quiz尚未发布，无法发送提醒'}, status=400)
+
+    if not quiz.course:
+        return Response({'error': 'Quiz未关联课程，无法确定学生名单'}, status=400)
+
+    platform_email = settings.EMAIL_HOST_USER
+    if not platform_email:
+        return Response({'error': '平台邮箱未配置（EMAIL_HOST_USER）'}, status=503)
+
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+    enrollments = Enrollment.objects.filter(course=quiz.course).select_related('user')
+    submitted_ids = set(QuizSubmission.objects.filter(quiz=quiz).values_list('student_id', flat=True))
+    reminded_ids = set(QuizReminderLog.objects.filter(quiz=quiz).values_list('student_id', flat=True))
+
+    sent, skipped, failed = 0, 0, 0
+
+    for enrollment in enrollments:
+        student = enrollment.user
+        if student.id in submitted_ids or student.id in reminded_ids:
+            skipped += 1
+            continue
+        if not student.email:
+            skipped += 1
+            continue
+
+        end_time_str = ''
+        if quiz.end_time:
+            end_time_local = timezone.localtime(quiz.end_time)
+            end_time_str = end_time_local.strftime('%Y年%m月%d日 %H:%M')
+
+        subject = f'【提醒】Quiz「{quiz.title}」' + (f'将于 {end_time_str} 截止' if end_time_str else '尚未完成')
+        body = (
+            f'{student.username} 同学，您好！\n\n'
+            f'您在课程「{quiz.course.title}」中有一份 Quiz 尚未完成，请尽快完成：\n\n'
+            f'  📝 Quiz 名称：{quiz.title}\n'
+            + (f'  ⏰ 截止时间：{end_time_str}\n' if end_time_str else '')
+            + f'  🔗 答题链接：{frontend_url}/quiz/{quiz.share_code}\n\n'
+            f'请尽快完成，祝学习顺利！\n\n'
+            f'—— {quiz.creator.username} 老师'
+        )
+
+        try:
+            send_mail(
+                subject=subject,
+                message=body,
+                from_email=platform_email,
+                recipient_list=[student.email],
+                fail_silently=False,
+            )
+            QuizReminderLog.objects.get_or_create(quiz=quiz, student=student)
+            sent += 1
+        except Exception as e:
+            failed += 1
+            logger.error(f'[Quiz提醒] 手动发送失败 → {student.email}，原因: {e}')
+
+    return Response({
+        'quiz_id': quiz_id,
+        'quiz_title': quiz.title,
+        'sent': sent,
+        'skipped': skipped,
+        'failed': failed,
+    })
