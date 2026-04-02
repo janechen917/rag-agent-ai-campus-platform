@@ -19,6 +19,7 @@ export default {
     myLearning: 'My Learning',
     searchCourses: 'Search Courses',
     aiTutor: 'AI Tutor',
+    aiColosseum: 'AI Colosseum',
     aiTeachingAssistant: 'AI Teaching Assistant',
     communication: 'Communication',
     myCourses: 'My Courses',

@@ -1,5 +1,16 @@
 from rest_framework import serializers
-from .models import AIConversation, AIMessage, KnowledgeBase, CourseRecommendation, Quiz, QuizQuestion, QuizSubmission
+from .models import (
+    AIConversation,
+    AIMessage,
+    KnowledgeBase,
+    CourseRecommendation,
+    Quiz,
+    QuizQuestion,
+    QuizSubmission,
+    DebateMatch,
+    DebateRound,
+    DebateBadge,
+)
 from django.contrib.auth.models import User
 
 
@@ -145,3 +156,41 @@ class QuizSubmissionSerializer(serializers.ModelSerializer):
         fields = ['id', 'quiz', 'quiz_title', 'student', 'student_name', 'answers',
                   'score', 'total_questions', 'correct_count', 'submitted_at']
         read_only_fields = ['id', 'student', 'score', 'total_questions', 'correct_count', 'submitted_at']
+
+
+class DebateStartSerializer(serializers.Serializer):
+    """辩论开局请求"""
+    topic = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    course_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class DebateAttackSerializer(serializers.Serializer):
+    """辩论攻击请求"""
+    argument = serializers.CharField(required=True, max_length=5000)
+
+
+class DebateRoundSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DebateRound
+        fields = [
+            'id', 'round_number', 'student_argument', 'ai_counter',
+            'logic_score', 'evidence_score', 'knowledge_score', 'structure_score',
+            'attack_power', 'verdict', 'created_at'
+        ]
+
+
+class DebateBadgeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DebateBadge
+        fields = ['id', 'code', 'title', 'description', 'icon', 'earned_at']
+
+
+class DebateMatchSerializer(serializers.ModelSerializer):
+    rounds = DebateRoundSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DebateMatch
+        fields = [
+            'id', 'topic', 'ai_claim', 'status', 'rounds_count', 'total_attack',
+            'best_attack', 'course', 'created_at', 'updated_at', 'rounds'
+        ]

@@ -18,6 +18,7 @@
             {{ userStore.user.user_type === 'teacher' ? t('nav.teacherTitle').split(' - ')[1] : t('nav.studentTitle').split(' - ')[1] }}
           </el-menu-item>
           <el-menu-item index="/ai-tutor">{{ t('nav.aiTutor') }}</el-menu-item>
+          <el-menu-item v-if="userStore.user?.user_type === 'student'" index="/ai-colosseum">{{ t('nav.aiColosseum') }}</el-menu-item>
         </el-menu>
         <div class="user-area">
           <el-select

@@ -167,3 +167,78 @@ class QuizReminderLog(models.Model):
 
     def __str__(self):
         return f"{self.student.username} - {self.quiz.title} - {self.sent_at}"
+
+
+class DebateMatch(models.Model):
+    """AI辩论对战记录"""
+    STATUS_CHOICES = [
+        ('ongoing', '进行中'),
+        ('won', '获胜'),
+        ('lost', '失败'),
+    ]
+
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='debate_matches', verbose_name='学生')
+    topic = models.CharField(max_length=200, verbose_name='辩题')
+    ai_claim = models.TextField(verbose_name='AI观点')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ongoing', verbose_name='状态')
+    rounds_count = models.IntegerField(default=0, verbose_name='回合数')
+    total_attack = models.IntegerField(default=0, verbose_name='累计攻击力')
+    best_attack = models.IntegerField(default=0, verbose_name='最高攻击力')
+    course = models.ForeignKey('courses.Course', on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='debate_matches', verbose_name='关联课程')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+
+    class Meta:
+        db_table = 'debate_matches'
+        verbose_name = '辩论对战'
+        verbose_name_plural = '辩论对战'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.student.username} - {self.topic}"
+
+
+class DebateRound(models.Model):
+    """AI辩论回合记录"""
+    match = models.ForeignKey(DebateMatch, on_delete=models.CASCADE, related_name='rounds', verbose_name='对战')
+    round_number = models.IntegerField(verbose_name='回合序号')
+    student_argument = models.TextField(verbose_name='学生反驳')
+    ai_counter = models.TextField(verbose_name='AI反击')
+    logic_score = models.IntegerField(default=0, verbose_name='逻辑得分')
+    evidence_score = models.IntegerField(default=0, verbose_name='证据得分')
+    knowledge_score = models.IntegerField(default=0, verbose_name='知识得分')
+    structure_score = models.IntegerField(default=0, verbose_name='结构得分')
+    attack_power = models.IntegerField(default=0, verbose_name='攻击力')
+    verdict = models.CharField(max_length=100, blank=True, verbose_name='本回合评价')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+
+    class Meta:
+        db_table = 'debate_rounds'
+        verbose_name = '辩论回合'
+        verbose_name_plural = '辩论回合'
+        ordering = ['created_at']
+        unique_together = ['match', 'round_number']
+
+    def __str__(self):
+        return f"{self.match_id} - Round {self.round_number}"
+
+
+class DebateBadge(models.Model):
+    """学生在AI辩论场获得的勋章"""
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='debate_badges', verbose_name='学生')
+    code = models.CharField(max_length=50, verbose_name='勋章代码')
+    title = models.CharField(max_length=100, verbose_name='勋章名称')
+    description = models.CharField(max_length=255, verbose_name='勋章说明')
+    icon = models.CharField(max_length=10, default='🏅', verbose_name='图标')
+    earned_at = models.DateTimeField(auto_now_add=True, verbose_name='获得时间')
+
+    class Meta:
+        db_table = 'debate_badges'
+        verbose_name = '辩论勋章'
+        verbose_name_plural = '辩论勋章'
+        ordering = ['-earned_at']
+        unique_together = ['student', 'code']
+
+    def __str__(self):
+        return f"{self.student.username} - {self.title}"

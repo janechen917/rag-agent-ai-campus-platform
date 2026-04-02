@@ -49,6 +49,10 @@
               <el-icon><ChatDotRound /></el-icon>
               <span>{{ t('nav.aiTutor') }}</span>
             </el-menu-item>
+            <el-menu-item index="/ai-colosseum">
+              <el-icon><Trophy /></el-icon>
+              <span>{{ t('nav.aiColosseum') }}</span>
+            </el-menu-item>
             <el-menu-item index="/chat">
               <el-icon><ChatLineRound /></el-icon>
               <span>{{ t('nav.communication') }}</span>
@@ -281,7 +285,7 @@ import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 import { 
-  Reading, HomeFilled, ChatDotRound, ChatLineRound, User, Clock, Search, Bell
+  Reading, HomeFilled, ChatDotRound, ChatLineRound, User, Clock, Search, Bell, Trophy
 } from '@element-plus/icons-vue'
 
 const router = useRouter()

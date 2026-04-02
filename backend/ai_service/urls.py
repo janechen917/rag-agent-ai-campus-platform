@@ -6,7 +6,8 @@ from .views import (
     upload_and_generate_quiz, my_quizzes, publish_quiz, quiz_detail,
     quiz_by_share_code, submit_quiz, quiz_submissions, delete_quiz, course_quizzes,
     quiz_statistics, my_quiz_submissions, teacher_analytics, pending_quizzes,
-    quiz_reminder_logs, send_quiz_reminder_now
+    quiz_reminder_logs, send_quiz_reminder_now,
+    debate_start, debate_attack, debate_profile
 )
 
 router = DefaultRouter()
@@ -19,6 +20,11 @@ urlpatterns = [
     path('chat-with-file/', ai_chat_with_image, name='ai_chat_with_file'),
     path('recommendations/', get_recommendations, name='get_recommendations'),
     path('search/', semantic_search, name='semantic_search'),
+
+    # AI Colosseum 辩论场
+    path('colosseum/profile/', debate_profile, name='debate_profile'),
+    path('colosseum/match/start/', debate_start, name='debate_start'),
+    path('colosseum/match/<int:match_id>/attack/', debate_attack, name='debate_attack'),
 
     # Quiz相关
     path('quiz/generate/', upload_and_generate_quiz, name='generate_quiz'),

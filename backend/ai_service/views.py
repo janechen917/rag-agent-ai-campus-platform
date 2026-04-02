@@ -1,6 +1,7 @@
 import json
 import re
 import logging
+import random
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.response import Response
@@ -12,11 +13,23 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-from .models import AIConversation, AIMessage, KnowledgeBase, CourseRecommendation, Quiz, QuizQuestion, QuizSubmission
+from .models import (
+    AIConversation,
+    AIMessage,
+    KnowledgeBase,
+    CourseRecommendation,
+    Quiz,
+    QuizQuestion,
+    QuizSubmission,
+    DebateMatch,
+    DebateRound,
+    DebateBadge,
+)
 from .serializers import (
     AIConversationSerializer, AIMessageSerializer, KnowledgeBaseSerializer,
     ChatRequestSerializer, ChatResponseSerializer, CourseRecommendationSerializer,
-    QuizSerializer, QuizStudentSerializer, QuizQuestionSerializer, QuizSubmissionSerializer
+    QuizSerializer, QuizStudentSerializer, QuizQuestionSerializer, QuizSubmissionSerializer,
+    DebateStartSerializer, DebateAttackSerializer, DebateBadgeSerializer
 )
 from .ai_engine import ai_service
 from courses.models import Course, CourseFile
@@ -385,6 +398,222 @@ def _get_course_recommendations(message: str, user) -> list:
         }
         for course in courses
     ]
+
+
+DEBATE_TOPICS = [
+    '记忆知识点比理解原理更重要',
+    '课堂作业应该全部使用开卷形式',
+    'AI 应该取代传统编程入门课程',
+    '考试成绩应当比项目实践占更高权重',
+    '团队协作能力比个人技术能力更关键',
+    '大学课程应当取消固定教材',
+    '算法课不需要数学基础也能学好',
+    '所有课程都应该采用翻转课堂',
+]
+
+BADGE_RULES = {
+    'first_win': {
+        'title': '角斗士初胜',
+        'description': '首次在 AI 辩论场击败 AI',
+        'icon': '🥇',
+    },
+    'critical_hit': {
+        'title': '逻辑暴击',
+        'description': '单回合攻击力达到 90+',
+        'icon': '⚔️',
+    },
+    'knowledge_guardian': {
+        'title': '知识守卫者',
+        'description': '3 回合以上知识得分平均达到 80+',
+        'icon': '🛡️',
+    },
+}
+
+
+def _safe_json_object(text: str) -> dict:
+    """从AI响应中尽量提取JSON对象"""
+    if not text:
+        return {}
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if not match:
+        return {}
+    try:
+        return json.loads(match.group())
+    except Exception:
+        return {}
+
+
+def _extract_keywords(text: str, limit: int = 10) -> list:
+    words = re.findall(r'[A-Za-z]{4,}|[\u4e00-\u9fff]{2,}', text or '')
+    uniq = []
+    for w in words:
+        lw = w.lower()
+        if lw not in uniq and len(lw) > 1:
+            uniq.append(lw)
+        if len(uniq) >= limit:
+            break
+    return uniq
+
+
+def _build_course_context(course):
+    if not course:
+        return ''
+    files = CourseFile.objects.filter(course=course).values_list('file_name', flat=True)[:8]
+    file_text = '、'.join(list(files)) if files else '无'
+    return f"课程：{course.title}\n课程描述：{course.description[:500]}\n课程文件：{file_text}"
+
+
+def _generate_debate_claim(topic: str, course_context: str = '') -> str:
+    prompt = (
+        '你是课堂辩论赛中的 AI 对手。请针对下面辩题，给出一句具有争议性的立场陈述。'
+        '要求：1）观点要鲜明可反驳；2）字数 40-90；3）不输出编号或解释。\n\n'
+        f'辩题：{topic}\n\n'
+        f'课程上下文（可选）：\n{course_context[:1200]}'
+    )
+    try:
+        result = ai_service.chat(prompt, [], mode='direct').strip()
+        result = re.sub(r'^\s*[\-\d\.、:：]+', '', result)
+        return result[:300] if result else f'我坚持认为：{topic}，因为这能让学习效率最大化。'
+    except Exception:
+        return f'我坚持认为：{topic}，因为这能让学习效率最大化。'
+
+
+def _evaluate_argument(argument: str, topic: str, ai_claim: str, course_context: str = '') -> dict:
+    prompt = f"""你是严谨的辩论裁判。请评估学生反驳质量并给出JSON结果。
+
+辩题：{topic}
+AI观点：{ai_claim}
+学生反驳：{argument}
+课程上下文：{course_context[:1200]}
+
+评分维度（0-100整数）：
+- logic_score：论证逻辑
+- evidence_score：证据与例子
+- knowledge_score：课程知识使用
+- structure_score：结构清晰度
+
+攻击力 attack_power 按以下公式计算后取整：
+attack_power = logic*0.35 + evidence*0.2 + knowledge*0.3 + structure*0.15
+
+verdict 用一句简短中文点评。
+
+只返回JSON对象：
+{{
+  "logic_score": 0,
+  "evidence_score": 0,
+  "knowledge_score": 0,
+  "structure_score": 0,
+  "attack_power": 0,
+  "verdict": ""
+}}"""
+    try:
+        raw = ai_service.chat(prompt, [], mode='direct')
+        data = _safe_json_object(raw)
+        if data:
+            logic = int(max(0, min(100, data.get('logic_score', 0))))
+            evidence = int(max(0, min(100, data.get('evidence_score', 0))))
+            knowledge = int(max(0, min(100, data.get('knowledge_score', 0))))
+            structure = int(max(0, min(100, data.get('structure_score', 0))))
+            attack = int(round(logic * 0.35 + evidence * 0.2 + knowledge * 0.3 + structure * 0.15))
+            return {
+                'logic_score': logic,
+                'evidence_score': evidence,
+                'knowledge_score': knowledge,
+                'structure_score': structure,
+                'attack_power': max(0, min(100, int(data.get('attack_power', attack) or attack))),
+                'verdict': str(data.get('verdict', '论证具备一定说服力，可继续强化证据。'))[:120],
+            }
+    except Exception:
+        pass
+
+    text = argument or ''
+    length = len(text)
+    connectors = ['因为', '所以', '因此', '但是', '然而', '首先', '其次', '最后', '例如', '比如', 'if', 'then', 'therefore']
+    connector_hits = sum(1 for c in connectors if c.lower() in text.lower())
+    logic_score = min(95, 45 + connector_hits * 7 + (12 if length > 180 else 0) + (10 if length > 320 else 0))
+
+    evidence_markers = ['数据', '研究', '实验', '案例', '统计', '论文', '教材', '章节', '图', '表']
+    evidence_hits = sum(1 for m in evidence_markers if m in text)
+    evidence_score = min(95, 35 + evidence_hits * 10 + (8 if '例如' in text or '比如' in text else 0))
+
+    course_keywords = _extract_keywords(course_context, limit=12)
+    kw_hits = sum(1 for k in course_keywords if k and k in text.lower())
+    knowledge_score = min(95, 40 + kw_hits * 12)
+
+    paragraphs = [p for p in re.split(r'[\n。！？!?]', text) if p.strip()]
+    structure_score = min(95, 40 + min(5, len(paragraphs)) * 8 + (8 if any(w in text for w in ['首先', '其次', '最后']) else 0))
+
+    attack_power = int(round(logic_score * 0.35 + evidence_score * 0.2 + knowledge_score * 0.3 + structure_score * 0.15))
+    verdict = '反驳有基础火力，建议加入更具体教材证据，形成闭环论证。'
+    if attack_power >= 85:
+        verdict = '反驳打击面精准，逻辑与知识点结合非常有力。'
+    elif attack_power >= 70:
+        verdict = '反驳较有说服力，再补充可验证证据会更强。'
+
+    return {
+        'logic_score': int(logic_score),
+        'evidence_score': int(evidence_score),
+        'knowledge_score': int(knowledge_score),
+        'structure_score': int(structure_score),
+        'attack_power': int(max(0, min(100, attack_power))),
+        'verdict': verdict,
+    }
+
+
+def _generate_ai_counter(topic: str, ai_claim: str, argument: str, score_data: dict) -> str:
+    prompt = f"""你是辩论对手。请针对学生反驳给出一句到两句反击。
+要求：
+1) 语气有竞技感，但不攻击人格；
+2) 点名学生论证中的一个薄弱点；
+3) 结尾抛出一个追问。
+
+辩题：{topic}
+AI观点：{ai_claim}
+学生反驳：{argument}
+评分：{json.dumps(score_data, ensure_ascii=False)}
+"""
+    try:
+        result = ai_service.chat(prompt, [], mode='direct').strip()
+        return result[:320] if result else '你的反驳有亮点，但证据还不够硬。你能给出更直接的教材依据吗？'
+    except Exception:
+        return '你的反驳有亮点，但证据还不够硬。你能给出更直接的教材依据吗？'
+
+
+def _grant_debate_badges(user, match: DebateMatch, latest_round: DebateRound):
+    earned_badges = []
+
+    win_count = DebateMatch.objects.filter(student=user, status='won').count()
+    if win_count == 1:
+        badge, created = DebateBadge.objects.get_or_create(
+            student=user,
+            code='first_win',
+            defaults=BADGE_RULES['first_win'],
+        )
+        if created:
+            earned_badges.append(badge)
+
+    if latest_round.attack_power >= 90:
+        badge, created = DebateBadge.objects.get_or_create(
+            student=user,
+            code='critical_hit',
+            defaults=BADGE_RULES['critical_hit'],
+        )
+        if created:
+            earned_badges.append(badge)
+
+    rounds = match.rounds.all()
+    if rounds.count() >= 3:
+        avg_knowledge = rounds.aggregate(v=Avg('knowledge_score'))['v'] or 0
+        if avg_knowledge >= 80:
+            badge, created = DebateBadge.objects.get_or_create(
+                student=user,
+                code='knowledge_guardian',
+                defaults=BADGE_RULES['knowledge_guardian'],
+            )
+            if created:
+                earned_badges.append(badge)
+
+    return earned_badges
 
 
 class KnowledgeBaseViewSet(viewsets.ModelViewSet):
@@ -1119,6 +1348,175 @@ def teacher_analytics(request):
         })
 
     return Response({'overview': overview, 'courses': course_data})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def debate_start(request):
+    """开启AI辩论对战"""
+    serializer = DebateStartSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    topic = serializer.validated_data.get('topic', '').strip() or random.choice(DEBATE_TOPICS)
+    course = None
+    course_id = serializer.validated_data.get('course_id')
+    if course_id:
+        try:
+            course = Course.objects.get(id=course_id)
+        except Course.DoesNotExist:
+            return Response({'error': '课程不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+    course_context = _build_course_context(course)
+    ai_claim = _generate_debate_claim(topic, course_context)
+
+    match = DebateMatch.objects.create(
+        student=request.user,
+        topic=topic,
+        ai_claim=ai_claim,
+        course=course,
+    )
+
+    return Response({
+        'match_id': match.id,
+        'topic': match.topic,
+        'ai_claim': match.ai_claim,
+        'status': match.status,
+        'rounds_count': match.rounds_count,
+        'total_attack': match.total_attack,
+        'best_attack': match.best_attack,
+        'course_title': course.title if course else '',
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def debate_attack(request, match_id):
+    """学生提交反驳，AI评分并反击"""
+    try:
+        match = DebateMatch.objects.get(id=match_id, student=request.user)
+    except DebateMatch.DoesNotExist:
+        return Response({'error': '对战不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+    if match.status != 'ongoing':
+        return Response({'error': '该对战已结束，请开启新挑战'}, status=status.HTTP_400_BAD_REQUEST)
+
+    serializer = DebateAttackSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    argument = serializer.validated_data['argument'].strip()
+    if len(argument) < 20:
+        return Response({'error': '反驳内容太短，至少输入20个字'}, status=status.HTTP_400_BAD_REQUEST)
+
+    round_number = match.rounds.count() + 1
+    course_context = _build_course_context(match.course)
+    score_data = _evaluate_argument(argument, match.topic, match.ai_claim, course_context)
+    ai_counter = _generate_ai_counter(match.topic, match.ai_claim, argument, score_data)
+
+    debate_round = DebateRound.objects.create(
+        match=match,
+        round_number=round_number,
+        student_argument=argument,
+        ai_counter=ai_counter,
+        logic_score=score_data['logic_score'],
+        evidence_score=score_data['evidence_score'],
+        knowledge_score=score_data['knowledge_score'],
+        structure_score=score_data['structure_score'],
+        attack_power=score_data['attack_power'],
+        verdict=score_data['verdict'],
+    )
+
+    match.rounds_count = round_number
+    match.total_attack += debate_round.attack_power
+    match.best_attack = max(match.best_attack, debate_round.attack_power)
+
+    avg_attack = match.total_attack / max(1, match.rounds_count)
+    if debate_round.attack_power >= 88 or match.total_attack >= 230 or (round_number >= 3 and avg_attack >= 78):
+        match.status = 'won'
+    elif round_number >= 5 and avg_attack < 68:
+        match.status = 'lost'
+
+    match.save()
+
+    gained_badges = []
+    if match.status == 'won':
+        gained_badges = _grant_debate_badges(request.user, match, debate_round)
+
+    return Response({
+        'match_id': match.id,
+        'round_number': round_number,
+        'attack_power': debate_round.attack_power,
+        'score_breakdown': {
+            'logic': debate_round.logic_score,
+            'evidence': debate_round.evidence_score,
+            'knowledge': debate_round.knowledge_score,
+            'structure': debate_round.structure_score,
+        },
+        'verdict': debate_round.verdict,
+        'ai_counter': debate_round.ai_counter,
+        'match_status': match.status,
+        'total_attack': match.total_attack,
+        'best_attack': match.best_attack,
+        'gained_badges': DebateBadgeSerializer(gained_badges, many=True).data,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def debate_profile(request):
+    """获取当前用户辩论场战绩与勋章"""
+    matches = DebateMatch.objects.filter(student=request.user)
+    total_matches = matches.count()
+    wins = matches.filter(status='won').count()
+    best_attack = matches.aggregate(v=Avg('best_attack'))['v'] or 0
+
+    latest_ongoing = matches.filter(status='ongoing').first()
+    recent_matches = matches.order_by('-created_at')[:8]
+    recent_data = [
+        {
+            'id': m.id,
+            'topic': m.topic,
+            'status': m.status,
+            'best_attack': m.best_attack,
+            'rounds_count': m.rounds_count,
+            'created_at': m.created_at.isoformat(),
+        }
+        for m in recent_matches
+    ]
+
+    badges = DebateBadge.objects.filter(student=request.user)
+    return Response({
+        'summary': {
+            'total_matches': total_matches,
+            'wins': wins,
+            'win_rate': round((wins / total_matches) * 100, 1) if total_matches else 0,
+            'average_best_attack': round(best_attack, 1),
+            'badge_count': badges.count(),
+        },
+        'current_match': {
+            'id': latest_ongoing.id,
+            'topic': latest_ongoing.topic,
+            'ai_claim': latest_ongoing.ai_claim,
+            'rounds_count': latest_ongoing.rounds_count,
+            'status': latest_ongoing.status,
+            'total_attack': latest_ongoing.total_attack,
+            'best_attack': latest_ongoing.best_attack,
+            'rounds': [
+                {
+                    'id': r.id,
+                    'round_number': r.round_number,
+                    'student_argument': r.student_argument,
+                    'ai_counter': r.ai_counter,
+                    'attack_power': r.attack_power,
+                    'verdict': r.verdict,
+                }
+                for r in latest_ongoing.rounds.all().order_by('round_number')
+            ],
+        } if latest_ongoing else None,
+        'recent_matches': recent_data,
+        'badges': DebateBadgeSerializer(badges, many=True).data,
+    })
 
 
 # ---------- Quiz 邮件提醒 API ----------
