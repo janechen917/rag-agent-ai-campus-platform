@@ -8,6 +8,12 @@
             <span>AI智能导师</span>
           </div>
           <div class="header-actions">
+            <el-tooltip v-if="!isTeacher" :content="aiMode === 'socratic' ? '当前：苏格拉底式引导' : '当前：直接回答模式'" placement="bottom">
+              <el-button @click="toggleAiMode" :icon="aiMode === 'socratic' ? 'ChatLineSquare' : 'ChatDotRound'" circle :type="aiMode === 'socratic' ? '' : 'success'" :title="aiMode === 'socratic' ? '切换为直接回答' : '切换为苏格拉底引导'">
+                <el-icon v-if="aiMode === 'socratic'"><ChatLineSquare /></el-icon>
+                <el-icon v-else><ChatDotRound /></el-icon>
+              </el-button>
+            </el-tooltip>
             <el-button @click="goBack" :icon="Back" circle title="返回" />
             <el-button @click="clearChat" type="danger" :icon="Delete" circle title="清空对话" />
           </div>
@@ -71,6 +77,24 @@
           >
             {{ suggestion }}
           </el-tag>
+        </div>
+        
+        <!-- 学生端课程选择器 -->
+        <div v-if="!isTeacher" class="course-selector-bar">
+          <el-select
+            v-model="selectedCourseId"
+            placeholder="请选择相关课程（可选，有助于AI精准引导）"
+            clearable
+            style="flex: 1"
+            size="default"
+          >
+            <el-option
+              v-for="course in enrolledCourses"
+              :key="course.id"
+              :label="course.title"
+              :value="course.id"
+            />
+          </el-select>
         </div>
         
         <div v-if="uploadedFileInfo" class="image-attachment-bar">
@@ -460,7 +484,7 @@
 import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { Delete, Promotion, Cpu, Back, Upload, CircleCheck, CircleClose, Picture, Close, Document } from '@element-plus/icons-vue'
+import { Delete, Promotion, Cpu, Back, Upload, CircleCheck, CircleClose, Picture, Close, Document, ChatLineSquare, ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
 import api from '@/api'
@@ -487,6 +511,10 @@ const uploadedImagePreview = ref(null)
 const uploadedFileInfo = ref(null)
 const imageUploadRef = ref(null)
 const chatHistory = ref([])
+const enrolledCourses = ref([])
+const selectedCourseId = ref(null)
+const currentConversationId = ref(null)
+const aiMode = ref('socratic') // 'socratic' | 'direct'
 
 // --- Quiz state ---
 const isTeacher = computed(() => userStore.user?.user_type === 'teacher')
@@ -572,6 +600,8 @@ const sendMessage = async (message) => {
       formData.append('message', message)
       formData.append('file', uploadedImageFile.value)
       formData.append('history', JSON.stringify(messages.value.slice(-10).map(m => ({ role: m.role, content: m.content }))))
+      if (currentConversationId.value) formData.append('conversation_id', currentConversationId.value)
+      formData.append('mode', aiMode.value)
       response = await api.post('/api/ai/chat-with-file/', formData, {
         timeout: 120000,
       })
@@ -583,9 +613,13 @@ const sendMessage = async (message) => {
     } else {
       response = await api.post('/api/ai/chat/', {
         message,
-        history: messages.value.slice(-10)
+        conversation_id: currentConversationId.value || null,
+        history: messages.value.slice(-10),
+        course_id: selectedCourseId.value || null,
+        mode: aiMode.value
       })
     }
+    if (response.data.conversation_id) currentConversationId.value = response.data.conversation_id
     messages.value.push({ role: 'assistant', content: response.data.response, timestamp: Date.now() })
   } catch (error) {
     console.error('AI chat error:', error)
@@ -607,11 +641,17 @@ const sendMessage = async (message) => {
 
 const clearChat = () => {
   messages.value = []
+  currentConversationId.value = null
   ElMessage.success('对话已清空')
 }
 
 const goBack = () => {
   router.push(userStore.user?.user_type === 'teacher' ? '/teacher-home' : '/student-home')
+}
+
+const toggleAiMode = () => {
+  aiMode.value = aiMode.value === 'socratic' ? 'direct' : 'socratic'
+  ElMessage.info(aiMode.value === 'socratic' ? '已切换为苏格拉底式引导模式' : '已切换为直接回答模式')
 }
 
 // --- File upload methods (Student) ---
@@ -674,6 +714,7 @@ const loadConversation = async (conv) => {
   try {
     const res = await api.get(`/api/ai/conversations/${conv.id}/`)
     const convData = res.data
+    currentConversationId.value = conv.id
     messages.value = (convData.messages || []).map(m => ({
       role: m.role,
       content: m.content,
@@ -892,9 +933,23 @@ const submitQuiz = async () => {
   finally { isSubmitting.value = false }
 }
 
+const loadEnrolledCourses = async () => {
+  try {
+    const res = await api.get('/api/courses/course-enrollments/')
+    const enrollments = res.data.results || res.data || []
+    enrolledCourses.value = enrollments.map(e => e.course).filter(Boolean)
+  } catch (e) { console.error(e) }
+}
+
 onMounted(() => {
-  if (isTeacher.value) { loadMyQuizzes(); loadMyCourses() }
-  else { loadChatHistory() }
+  if (isTeacher.value) {
+    aiMode.value = 'direct'
+    loadMyQuizzes()
+    loadMyCourses()
+  } else {
+    loadChatHistory()
+    loadEnrolledCourses()
+  }
 })
 </script>
 
@@ -1078,6 +1133,17 @@ onMounted(() => {
 .suggestion-tag:hover {
   transform: translateY(-2px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.course-selector-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
 }
 
 .input-row {

@@ -1,12 +1,16 @@
 import json
 import re
+import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.conf import settings
 from django.db.models import Q, Count, Avg, F
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 from .models import AIConversation, AIMessage, KnowledgeBase, CourseRecommendation, Quiz, QuizQuestion, QuizSubmission
 from .serializers import (
@@ -15,7 +19,7 @@ from .serializers import (
     QuizSerializer, QuizStudentSerializer, QuizQuestionSerializer, QuizSubmissionSerializer
 )
 from .ai_engine import ai_service
-from courses.models import Course
+from courses.models import Course, CourseFile
 
 
 class AIConversationViewSet(viewsets.ModelViewSet):
@@ -80,9 +84,28 @@ def ai_chat(request):
         content=message
     )
     
+    # 构建课程上下文
+    course_id = request_serializer.validated_data.get('course_id')
+    course_context = None
+    if course_id:
+        try:
+            course = Course.objects.get(id=course_id)
+            course_files = CourseFile.objects.filter(course=course).values(
+                'file_name', 'file_type', 'description'
+            )
+            course_context = {
+                'course_name': course.title,
+                'course_files': list(course_files),
+            }
+        except Course.DoesNotExist:
+            pass
+    
+    # 获取回答模式
+    mode = request_serializer.validated_data.get('mode', 'socratic')
+    
     # 调用AI服务
     try:
-        ai_response = ai_service.chat(message, history)
+        ai_response = ai_service.chat(message, history, course_context=course_context, mode=mode)
         
         # 保存AI回复
         ai_message = AIMessage.objects.create(
@@ -144,6 +167,7 @@ def ai_chat_with_image(request):
     message = request.data.get('message', '')
     uploaded_file = request.FILES.get('file') or request.FILES.get('image')
     history_str = request.data.get('history', '[]')
+    conversation_id = request.data.get('conversation_id')
 
     if not message and not uploaded_file:
         return Response({'error': '请输入消息或上传文件'}, status=status.HTTP_400_BAD_REQUEST)
@@ -153,11 +177,21 @@ def ai_chat_with_image(request):
     except (json.JSONDecodeError, TypeError):
         history = []
 
-    # 创建对话
-    conversation = AIConversation.objects.create(
-        user=request.user,
-        title=(message[:50] if message else '文件问答')
-    )
+    # 获取或创建对话
+    conversation = None
+    if conversation_id:
+        try:
+            conversation = AIConversation.objects.get(
+                id=int(conversation_id),
+                user=request.user
+            )
+        except (AIConversation.DoesNotExist, ValueError, TypeError):
+            pass
+    if not conversation:
+        conversation = AIConversation.objects.create(
+            user=request.user,
+            title=(message[:50] if message else '文件问答')
+        )
 
     # 保存用户消息
     AIMessage.objects.create(
@@ -199,15 +233,20 @@ def ai_chat_with_image(request):
                 print(f"⚠ 文件解析失败: {e}")
                 extracted_text = None
 
+    # 获取回答模式
+    mode = request.data.get('mode', 'socratic')
+    if mode not in ('socratic', 'direct'):
+        mode = 'socratic'
+    
     try:
         if is_image and image_base64:
-            ai_response = ai_service.chat_with_image(message, image_base64, content_type, history)
+            ai_response = ai_service.chat_with_image(message, image_base64, content_type, history, mode=mode)
         elif extracted_text:
             # 将文档内容作为上下文拼接到消息中
             doc_prompt = f"以下是学生上传的文档内容：\n\n{extracted_text[:8000]}\n\n学生的问题：{message if message else '请分析以上文档内容，并提供学习建议。'}"
-            ai_response = ai_service.chat(doc_prompt, history)
+            ai_response = ai_service.chat(doc_prompt, history, mode=mode)
         else:
-            ai_response = ai_service.chat(message, history)
+            ai_response = ai_service.chat(message, history, mode=mode)
 
         AIMessage.objects.create(
             conversation=conversation,
@@ -311,34 +350,27 @@ def semantic_search(request):
 
 def _get_course_recommendations(message: str, user) -> list:
     """
-    基于消息内容推荐相关课程
+    基于消息内容推荐相关课程（按标题/描述关键词匹配）
     """
-    # 简单的关键词匹配推荐
-    keywords = {
-        'python': 'programming',
-        'javascript': 'frontend',
-        'vue': 'frontend',
-        'react': 'frontend',
-        'django': 'backend',
-        'node': 'backend',
-        'ai': 'ai',
-        '机器学习': 'ai',
-        '深度学习': 'ai',
-    }
+    keywords = [
+        'python', 'javascript', 'vue', 'react', 'django', 'node',
+        'ai', '机器学习', '深度学习', 'java', 'c++', 'html', 'css',
+        '数据库', 'sql', '算法', '数据结构', '前端', '后端', '编程',
+    ]
     
     message_lower = message.lower()
-    matched_categories = []
+    matched_keywords = [kw for kw in keywords if kw in message_lower]
     
-    for keyword, category in keywords.items():
-        if keyword in message_lower:
-            matched_categories.append(category)
-    
-    if not matched_categories:
+    if not matched_keywords:
         return []
     
-    # 查询相关课程
+    # 按标题或描述匹配相关课程
+    q_filter = Q()
+    for kw in matched_keywords:
+        q_filter |= Q(title__icontains=kw) | Q(description__icontains=kw)
+    
     courses = Course.objects.filter(
-        category__in=matched_categories,
+        q_filter,
         is_published=True
     ).exclude(
         id__in=user.enrollments.values_list('course_id', flat=True)
@@ -458,7 +490,7 @@ def _generate_quiz_with_ai(ppt_text, question_count):
     "option_b": "选项B内容",
     "option_c": "选项C内容",
     "option_d": "选项D内容",
-    "correct_answer": "A",
+    "correct_answer": "B",
     "explanation": "解析说明"
   }}
 ]
@@ -468,10 +500,11 @@ def _generate_quiz_with_ai(ppt_text, question_count):
 2. 选项要有迷惑性，但正确答案必须明确
 3. 每题都要有简短的解析
 4. correct_answer只能是A/B/C/D之一
-5. 生成恰好{question_count}道题"""
+5. 生成恰好{question_count}道题
+6. 非常重要：正确答案必须均匀分布在A、B、C、D四个选项中，不要让所有答案都是同一个选项。请将正确内容随机放在不同选项位置"""
 
     try:
-        ai_response = ai_service.chat(prompt, [])
+        ai_response = ai_service.chat(prompt, [], mode='direct')
         # 从响应中提取JSON
         json_match = re.search(r'\[.*\]', ai_response, re.DOTALL)
         if json_match:
@@ -486,29 +519,48 @@ def _generate_quiz_with_ai(ppt_text, question_count):
 
 def _generate_fallback_questions(ppt_text, question_count):
     """在AI不可用时根据PPT文本生成基本题目"""
+    import random
+    option_labels = ['A', 'B', 'C', 'D']
     lines = [line.strip() for line in ppt_text.split('\n') if line.strip() and not line.startswith('第') and len(line.strip()) > 5]
     questions = []
     for i in range(min(question_count, len(lines))):
         content = lines[i] if i < len(lines) else f"知识点{i+1}"
+        options = [
+            f"{content[:40]}",
+            f"与{content[:20]}无关的内容",
+            f"{content[:20]}的反义描述",
+            f"以上都不正确",
+        ]
+        correct_idx = i % 4
+        # Rotate options so correct answer lands on different positions
+        rotated = options[-correct_idx:] + options[:-correct_idx] if correct_idx else options
         questions.append({
             "question_text": f"以下关于「{content[:30]}」的说法，哪个是正确的？",
-            "option_a": f"{content[:40]}",
-            "option_b": f"与{content[:20]}无关的内容",
-            "option_c": f"{content[:20]}的反义描述",
-            "option_d": f"以上都不正确",
-            "correct_answer": "A",
-            "explanation": f"根据课件内容，正确答案为A。"
+            "option_a": rotated[0],
+            "option_b": rotated[1],
+            "option_c": rotated[2],
+            "option_d": rotated[3],
+            "correct_answer": option_labels[correct_idx],
+            "explanation": f"根据课件内容，正确答案为{option_labels[correct_idx]}。"
         })
     # 补齐不足的题目
     while len(questions) < question_count:
-        idx = len(questions) + 1
+        idx = len(questions)
+        correct_idx = idx % 4
+        options = [
+            "课件中提到的正确描述",
+            "不正确的描述",
+            "无关的描述",
+            "以上都不正确",
+        ]
+        rotated = options[-correct_idx:] + options[:-correct_idx] if correct_idx else options
         questions.append({
-            "question_text": f"关于本课件的第{idx}个知识点，以下哪个说法正确？",
-            "option_a": "课件中提到的正确描述",
-            "option_b": "不正确的描述",
-            "option_c": "无关的描述",
-            "option_d": "以上都不正确",
-            "correct_answer": "A",
+            "question_text": f"关于本课件的第{idx+1}个知识点，以下哪个说法正确？",
+            "option_a": rotated[0],
+            "option_b": rotated[1],
+            "option_c": rotated[2],
+            "option_d": rotated[3],
+            "correct_answer": option_labels[correct_idx],
             "explanation": "请参考课件内容。"
         })
     return questions[:question_count]
@@ -547,8 +599,8 @@ def upload_and_generate_quiz(request):
     question_count = max(1, min(question_count, 30))  # 限制1-30题
     max_attempts = int(request.data.get('max_attempts', 1))
     max_attempts = max(1, min(max_attempts, 99))  # 限制1-99次
-    end_time = request.data.get('end_time')
-    course_id = request.data.get('course_id')
+    end_time = request.data.get('end_time') or None
+    course_id = request.data.get('course_id') or None
 
     # 验证课程权限
     course = None
@@ -559,16 +611,19 @@ def upload_and_generate_quiz(request):
             return Response({'error': '课程不存在或无权操作'}, status=status.HTTP_403_FORBIDDEN)
 
     # 创建Quiz记录
-    quiz = Quiz.objects.create(
-        title=title,
-        course=course,
-        creator=request.user,
-        source_file=file,
-        source_file_name=file.name,
-        question_count=question_count,
-        max_attempts=max_attempts,
-        end_time=end_time,
-    )
+    try:
+        quiz = Quiz.objects.create(
+            title=title,
+            course=course,
+            creator=request.user,
+            source_file=file,
+            source_file_name=file.name,
+            question_count=question_count,
+            max_attempts=max_attempts,
+            end_time=end_time,
+        )
+    except Exception as e:
+        return Response({'error': f'创建Quiz失败: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
     # 提取文件文本
     try:
@@ -627,6 +682,9 @@ def publish_quiz(request, quiz_id):
             quiz.course = course
         except Course.DoesNotExist:
             return Response({'error': '课程不存在或无权操作'}, status=status.HTTP_403_FORBIDDEN)
+
+    if quiz.end_time and timezone.now() > quiz.end_time:
+        return Response({'error': 'Quiz已截止，无法发布'}, status=status.HTTP_400_BAD_REQUEST)
 
     quiz.is_published = True
     quiz.save()
@@ -886,7 +944,7 @@ def my_quiz_submissions(request, quiz_id):
     })
 
 
-@api_view(['DELETE'])
+@api_view(['DELETE', 'POST'])
 @permission_classes([IsAuthenticated])
 def delete_quiz(request, quiz_id):
     """删除Quiz"""
@@ -902,8 +960,9 @@ def delete_quiz(request, quiz_id):
         except Exception:
             pass  # 文件不存在也继续删除数据库记录
     
+    quiz_title = quiz.title
     quiz.delete()
-    return Response(status=status.HTTP_204_NO_CONTENT)  # 204不应该有响应体
+    return Response({'message': f'Quiz「{quiz_title}」已删除'}, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -1103,6 +1162,9 @@ def send_quiz_reminder_now(request, quiz_id):
 
     if not quiz.is_published:
         return Response({'error': 'Quiz尚未发布，无法发送提醒'}, status=400)
+
+    if quiz.end_time and timezone.now() > quiz.end_time:
+        return Response({'error': 'Quiz已截止，无法发送提醒'}, status=400)
 
     if not quiz.course:
         return Response({'error': 'Quiz未关联课程，无法确定学生名单'}, status=400)

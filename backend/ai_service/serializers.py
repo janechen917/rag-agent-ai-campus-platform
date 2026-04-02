@@ -29,6 +29,8 @@ class ChatRequestSerializer(serializers.Serializer):
     """聊天请求序列化器"""
     message = serializers.CharField(required=True, max_length=5000)
     conversation_id = serializers.IntegerField(required=False, allow_null=True)
+    course_id = serializers.IntegerField(required=False, allow_null=True)
+    mode = serializers.ChoiceField(choices=['socratic', 'direct'], required=False, default='socratic')
     history = serializers.ListField(
         child=serializers.DictField(),
         required=False,

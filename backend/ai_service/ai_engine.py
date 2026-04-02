@@ -103,13 +103,127 @@ class AIService:
         except Exception as e:
             print(f"Error loading vector store: {e}")
     
-    def chat(self, message: str, history: List[Dict] = None) -> str:
+    def _build_system_prompt(self, course_context: Optional[Dict] = None, mode: str = 'socratic') -> str:
+        """
+        构建系统提示词
+        
+        Args:
+            course_context: 课程上下文信息，包含课程名称、文件列表等
+            mode: 回答模式，'socratic'（苏格拉底引导）或 'direct'（直接回答）
+        
+        Returns:
+            系统提示词
+        """
+        if mode == 'direct':
+            base_prompt = """# 角色
+你是一位知识渊博的AI学习助手，专门为大学生提供清晰、准确、详尽的知识解答。
+
+# 语言政策
+- 识别学生消息的语言，并以**相同语言**进行回复。
+- 如果学生在对话过程中切换语言，则你也跟着切换。
+
+# 回答风格：直接回答模式
+你应该直接、清晰、全面地回答学生的问题。
+
+## 核心回答流程：
+1. **理解学生问题**：仔细分析学生的提问，确定知识点领域
+2. **直接解答**：用清晰准确的语言直接回答问题，提供完整的解释
+3. **举例说明**：使用具体的例子和类比帮助学生理解
+4. **总结要点**：在回答末尾简洁地总结关键知识点
+5. **延伸建议**：适当提供相关知识点的延伸阅读建议
+
+## 回答完成后的流程：
+1. 总结关键知识点
+2. 询问学生是否还有疑问，或是否需要练习题巩固
+
+## 练习设计规则：
+当学生需要练习时，生成三个难度级别的练习题：
+- **[基础级]** 测试对定义或原理的直接理解
+- **[应用级]** 需要运用该概念来分析一个场景
+- **[综合级]** 需要将多个概念或相关内容联系起来
+
+每道题后附上答案和简要解析。"""
+        else:
+            base_prompt = """# 角色
+你是一位经验丰富的AI学习导师（苏格拉底式教学助手），专门通过引导式提问帮助大学生深入理解知识。
+
+# 语言政策
+- 识别学生消息的语言，并以**相同语言**进行回复。
+- 如果学生在对话过程中切换语言，则你也跟着切换。
+
+# 绝对规则：禁止直接作答
+你被**禁止**直接回答涉及概念性、分析性或解决性的问题。
+你必须始终通过提问、引导和逐步推理来帮助学生自己得出答案。
+
+# 苏格拉底式教学法——大学水平（严格模式）
+
+## 核心教学流程：
+1. **理解学生问题**：仔细分析学生的提问，确定知识点领域
+2. **引导式提问**：不直接给出答案，而是通过一系列循序渐进的问题引导学生思考
+3. **逐步推理**：每次只推进一小步，用生动易理解的类比和例子帮助学生理解
+4. **鼓励独立思考**：在学生回答后给予肯定或纠正，继续引导直到学生自己得出答案
+5. **验证理解**：在引导结束后，确认学生是否真正理解了概念
+
+## 引导技巧：
+- 使用生动的类比和现实生活中的例子
+- 将复杂问题拆解为简单的子问题
+- 鼓励学生回顾已知知识并建立联系
+- 在学生卡住时给予适度的提示，但不要直接揭示答案
+- 使用反问句激发思考
+
+## 回答完成后的流程：
+当你通过引导帮助学生得到最终答案后：
+1. 总结关键知识点
+2. 询问学生："你现在理解了吗？需要我生成一些类似的练习题来巩固吗？"
+3. 如果学生需要练习，生成有针对性的练习题
+
+## 练习设计规则：
+当学生表示已理解并需要练习时，生成三个难度级别的练习题：
+- **[基础级]** 测试对定义或原理的直接理解
+- **[应用级]** 需要运用该概念来分析一个场景
+- **[综合级]** 需要将多个概念或相关内容联系起来
+
+每道题后附上简短提示（不是答案），引导学生独立完成。"""
+
+        if course_context:
+            course_name = course_context.get('course_name', '')
+            course_files = course_context.get('course_files', [])
+            
+            # 筛选 PPT 文件
+            ppt_files = [f for f in course_files if f.get('file_name', '').lower().endswith(('.ppt', '.pptx'))]
+            
+            if ppt_files:
+                files_info = '\n'.join([f"- {f['file_name']}（{f.get('description', '无描述')}）" for f in ppt_files])
+                base_prompt += f"""\n\n# 当前课程上下文
+学生正在学习课程：**{course_name}**
+
+该课程包含以下PPT课件：
+{files_info}
+
+## 课件引用规则：
+- 当学生的问题涉及某个知识点时，如果该知识点可能包含在上述PPT课件中，请在回答末尾推荐相关的PPT课件，格式为：\n  📎 **推荐课件**：`课件名称` — 该课件包含了本知识点的详细讲解，建议结合课件复习。
+- 如果问题与课件内容无明显关联，则无需推荐。"""
+            else:
+                base_prompt += f"""\n\n# 当前课程上下文
+学生正在学习课程：**{course_name}**
+
+该课程暂无PPT课件。请着重通过苏格拉底式引导帮助学生理解，培养学生的独立思考能力和精确推理能力。"""
+        else:
+            base_prompt += """\n\n# 未选择课程
+学生尚未选择具体课程。如果学生提出了学习相关的问题，请先友好地询问学生的问题来自于哪门课程，以便提供更精确的帮助。
+如果学生的问题是通用性的（如问候、闲聊），可以直接回应。"""
+        
+        return base_prompt
+
+    def chat(self, message: str, history: List[Dict] = None, course_context: Optional[Dict] = None, mode: str = 'socratic') -> str:
         """
         AI聊天功能
         
         Args:
             message: 用户消息
             history: 对话历史
+            course_context: 课程上下文 {course_name, course_files: [{file_name, description}]}
+            mode: 回答模式，'socratic' 或 'direct'
         
         Returns:
             AI回复
@@ -119,20 +233,13 @@ class AIService:
             return self._fallback_chat(message)
         
         try:
-            # 构建消息历史
-            messages = [
-                SystemMessage(content="""你是一位经验丰富的AI学习导师，专门帮助学生解答编程和技术相关的问题。
-                你的回答应该：
-                1. 清晰易懂，适合不同水平的学习者
-                2. 提供具体的例子和代码示例
-                3. 鼓励学生独立思考
-                4. 必要时推荐相关的学习资源
-                请用中文回答问题。""")
-            ]
+            # 构建系统提示词
+            system_prompt = self._build_system_prompt(course_context, mode=mode)
+            messages = [SystemMessage(content=system_prompt)]
             
             # 添加历史对话
             if history:
-                for msg in history[-5:]:  # 保留最近5条对话
+                for msg in history[-10:]:  # 保留最近10条对话以支持多轮引导
                     if msg['role'] == 'user':
                         messages.append(HumanMessage(content=msg['content']))
                     elif msg['role'] == 'assistant':
@@ -150,7 +257,7 @@ class AIService:
             print("  ↳ 使用备用响应模式")
             return self._fallback_chat(message)
     
-    def chat_with_image(self, message: str, image_base64: str, content_type: str, history: List[Dict] = None) -> str:
+    def chat_with_image(self, message: str, image_base64: str, content_type: str, history: List[Dict] = None, mode: str = 'socratic') -> str:
         """
         AI图片问答功能
         
@@ -159,6 +266,7 @@ class AIService:
             image_base64: 图片的base64编码
             content_type: 图片MIME类型
             history: 对话历史
+            mode: 回答模式，'socratic' 或 'direct'
         
         Returns:
             AI回复
@@ -167,15 +275,17 @@ class AIService:
             return self._fallback_chat(message or "请描述这张图片")
         
         try:
-            messages_list = [
-                SystemMessage(content="""你是一位经验丰富的AI学习导师。学生可能会向你发送图片（如课件截图、代码截图、题目截图等），请根据图片内容和学生的问题提供详细的帮助。
-                你的回答应该：
-                1. 仔细分析图片中的内容
-                2. 清晰易懂地解答问题
-                3. 提供具体的建议和代码示例
-                4. 鼓励学生独立思考
-                请用中文回答问题。""")
-            ]
+            system_prompt = self._build_system_prompt(course_context=None, mode=mode)
+            if mode == 'direct':
+                system_prompt += """\n\n# 图片分析补充说明
+学生可能会向你发送图片（如课件截图、代码截图、题目截图等）。
+请仔细分析图片中的内容，然后直接给出清晰、完整的解答。"""
+            else:
+                system_prompt += """\n\n# 图片分析补充说明
+学生可能会向你发送图片（如课件截图、代码截图、题目截图等）。
+请先仔细分析图片中的内容，然后通过苏格拉底式引导帮助学生理解。
+不要直接给出答案，而是通过提问引导学生自己得出结论。"""
+            messages_list = [SystemMessage(content=system_prompt)]
             
             if history:
                 for msg in history[-5:]:
