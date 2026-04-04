@@ -460,7 +460,9 @@ def _build_course_context(course):
         return ''
     files = CourseFile.objects.filter(course=course).values_list('file_name', flat=True)[:8]
     file_text = '、'.join(list(files)) if files else '无'
-    return f"课程：{course.title}\n课程描述：{course.description[:500]}\n课程文件：{file_text}"
+    safe_title = course.title or '未命名课程'
+    safe_description = (course.description or '')[:500]
+    return f"课程：{safe_title}\n课程描述：{safe_description}\n课程文件：{file_text}"
 
 
 def _generate_debate_claim(topic: str, course_context: str = '') -> str:
