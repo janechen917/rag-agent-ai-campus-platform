@@ -196,7 +196,12 @@ else:
     # 生产环境严格配置 - 从环境变量读取
     CORS_ALLOW_ALL_ORIGINS = False
     cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000')
-    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',')]
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
+    # 允许当前项目在 Vercel 的正式/预览子域，避免 preview 域名访问 API 时触发 CORS Network Error。
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r'^https://groupprojectteam11(-[a-z0-9-]+)?\.vercel\.app$',
+        r'^https://groupprojectteam11-[a-z0-9-]+-25053085g-9292s-projects\.vercel\.app$',
+    ]
 
 CORS_ALLOW_CREDENTIALS = True
 
