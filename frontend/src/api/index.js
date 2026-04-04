@@ -4,8 +4,13 @@ import { ElMessage } from 'element-plus'
 // 生产环境使用 VITE_API_BASE_URL 环境变量，开发环境使用 Vite 代理
 const getBaseURL = () => {
   if (import.meta.env.PROD) {
-    // 生产环境：使用环境变量指定的后端URL
-    return import.meta.env.VITE_API_BASE_URL || '/api'
+    // 生产环境：优先使用环境变量，并去掉尾部/和可能重复的/api
+    const envBase = (import.meta.env.VITE_API_BASE_URL || '').trim()
+    if (envBase) {
+      return envBase.replace(/\/+$/, '').replace(/\/api$/, '')
+    }
+    // 兜底使用线上后端地址，避免回退到同源 /api 导致 Vercel 重写成静态页
+    return 'https://groupprojectteam11back-production.up.railway.app'
   } else {
     // 开发环境：使用 Vite 代理
     return ''
@@ -20,6 +25,11 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
+    // 防止 baseURL 和 url 同时带 /api，出现 /api/api/xxx
+    if (config.baseURL && config.url && /\/api$/.test(config.baseURL) && /^\/api\//.test(config.url)) {
+      config.url = config.url.replace(/^\/api/, '')
+    }
+
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Token ${token}`
