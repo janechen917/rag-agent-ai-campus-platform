@@ -93,6 +93,12 @@ const routes = [
     meta: { title: '学习社区聊天室', requiresAuth: true }
   },
   {
+    path: '/ai-colosseum',
+    name: 'AIColosseum',
+    component: () => import('@/views/AIColosseum.vue'),
+    meta: { title: 'AI辩论场', requiresAuth: true, requiresRole: 'student' }
+  },
+  {
     path: '/quiz/:shareCode',
     name: 'QuizPage',
     component: () => import('@/views/QuizPage.vue'),

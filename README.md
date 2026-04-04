@@ -15,6 +15,7 @@
 
 - 🎯 **课程全生命周期管理** — 课程创建、发布、选课申请审批、章节课时、资料上传、学习进度跟踪、课程评价
 - 🤖 **AI 智能导师** — 基于 LangChain + GPT-4o-mini 的多轮对话问答，支持苏格拉底引导式与直接回答双模式，支持上传图片/文件进行多模态分析
+- 🏟️ **AI 辩论场** — 学生可发起辩题挑战 AI，系统按回合评估反驳质量（逻辑/证据/知识/结构）并计算攻击力，支持退出、最近战绩隐藏、勋章奖励
 - 📝 **Quiz 自动生成** — 教师上传 PPT/PDF/Word/TXT，AI 自动提取内容并生成选择题，支持自定义最大答题次数，学生在线答题自动评分，日历集成截止日期提醒
 - 📊 **Quiz 数据分析** — 教师可查看 Quiz 答题统计、分数分布、题目正确率等多维度数据
 - 💬 **实时聊天** — 基于 Django Channels + WebSocket 的即时通讯，支持文本/图片/文件消息
@@ -120,6 +121,7 @@ groupproject-team_11/
     │       ├── CourseRequests.vue                     # 选课申请审批
     │       ├── MyLearning.vue                         # 我的学习进度
     │       ├── AITutor.vue                            # AI 智能导师
+   │       ├── AIColosseum.vue                        # AI 辩论场
     │       ├── QuizPage.vue                           # Quiz 答题页
     │       ├── DataAnalysis.vue                       # Quiz 数据分析（教师端）
     │       ├── Chat.vue                               # 实时聊天室
@@ -185,7 +187,20 @@ groupproject-team_11/
 - **在线状态** — 实时追踪与广播在线用户
 - **自动重连** — 前端 WebSocket 断线后最多 5 次自动重连
 
-### 6. 多语言支持
+### 6. AI 辩论场（学生端）
+
+- **开局挑战** — 学生可自定义辩题，或由系统随机生成辩题；可选关联课程上下文
+- **回合对战** — 学生提交反驳后，系统从 `logic_score / evidence_score / knowledge_score / structure_score` 四维打分并计算攻击力
+- **结束判定**
+   - 胜利：满足任一条件即结束（单回合攻击力 >= 88；累计攻击力 >= 230；回合数 >= 3 且平均攻击力 >= 78）
+   - 失败：回合数 >= 5 且平均攻击力 < 68
+   - 主动退出：可一键退出当前对局，状态记为失败
+- **战绩管理**
+   - 最近战绩支持“删除”（实际为隐藏，不影响累计统计）
+   - 上方统计（总场次/胜场/胜率）基于全量历史对局
+- **勋章机制** — 首胜、暴击等条件触发勋章，勋章永久保留
+
+### 7. 多语言支持
 
 学生端、教师端界面均支持实时切换语言，语言偏好自动保存：
 
@@ -197,7 +212,7 @@ groupproject-team_11/
 
 切换后 ElementPlus 组件（日历、分页、日期选择器等）也同步切换语言。
 
-### 7. 用户角色系统
+### 8. 用户角色系统
 
 - **学生** — 选课、学习、答题、评价、AI 问答、接收通知与邮件提醒
 - **教师** — 创建课程、管理内容、审批申请、生成 Quiz、查看数据分析
@@ -232,6 +247,11 @@ groupproject-team_11/
 | | `GET /api/ai/conversations/{id}/` | 对话详情 |
 | | `POST /api/ai/recommendations/` | AI 课程推荐 |
 | | `POST /api/ai/search/` | 语义搜索 |
+| | `GET /api/ai/colosseum/profile/` | 获取辩论场战绩、勋章、当前对局 |
+| | `POST /api/ai/colosseum/match/start/` | 开启辩论对战 |
+| | `POST /api/ai/colosseum/match/{id}/attack/` | 提交反驳并结算回合 |
+| | `POST /api/ai/colosseum/match/{id}/quit/` | 主动退出当前对局 |
+| | `DELETE /api/ai/colosseum/match/{id}/delete/` | 从最近战绩中隐藏一条记录（不影响统计） |
 | **Quiz** | `POST /api/ai/quiz/generate/` | 上传文件生成 Quiz |
 | | `GET /api/ai/quiz/my/` | 我的 Quiz 列表（教师） |
 | | `GET /api/ai/quiz/{id}/` | Quiz 详情 |

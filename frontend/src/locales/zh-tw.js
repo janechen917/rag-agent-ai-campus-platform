@@ -19,6 +19,7 @@ export default {
     myLearning: '我的學習',
     searchCourses: '搜索課程',
     aiTutor: 'AI學習助手',
+    aiColosseum: 'AI辯論場',
     aiTeachingAssistant: 'AI教學助手',
     communication: '師生溝通',
     myCourses: '我的課程',

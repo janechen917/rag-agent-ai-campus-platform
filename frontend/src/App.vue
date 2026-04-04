@@ -18,6 +18,7 @@
             {{ userStore.user.user_type === 'teacher' ? t('nav.teacherTitle').split(' - ')[1] : t('nav.studentTitle').split(' - ')[1] }}
           </el-menu-item>
           <el-menu-item index="/ai-tutor">{{ t('nav.aiTutor') }}</el-menu-item>
+          <el-menu-item v-if="userStore.user?.user_type === 'student'" index="/ai-colosseum">{{ t('nav.aiColosseum') }}</el-menu-item>
         </el-menu>
         <div class="user-area">
           <el-select
@@ -33,10 +34,10 @@
           <el-button type="primary" @click="router.push('/login')" v-if="!userStore.isLoggedIn">
             {{ t('common.login') }}
           </el-button>
-          <el-dropdown v-else>
+          <el-dropdown v-else-if="userStore.user">
             <span class="user-info">
-              <el-avatar :size="32">{{ userStore.user.username?.charAt(0) }}</el-avatar>
-              <span class="username">{{ userStore.user.username }}</span>
+              <el-avatar :size="32">{{ userStore.user?.username?.charAt(0) || '?' }}</el-avatar>
+              <span class="username">{{ userStore.user?.username || '' }}</span>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
@@ -45,6 +46,9 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+          <el-button type="primary" @click="router.push('/login')" v-else>
+            {{ t('common.login') }}
+          </el-button>
         </div>
       </el-header>
       
