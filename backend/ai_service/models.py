@@ -184,6 +184,7 @@ class DebateMatch(models.Model):
     rounds_count = models.IntegerField(default=0, verbose_name='回合数')
     total_attack = models.IntegerField(default=0, verbose_name='累计攻击力')
     best_attack = models.IntegerField(default=0, verbose_name='最高攻击力')
+    is_hidden = models.BooleanField(default=False, verbose_name='是否从最近战绩隐藏')
     course = models.ForeignKey('courses.Course', on_delete=models.SET_NULL, null=True, blank=True,
                                related_name='debate_matches', verbose_name='关联课程')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')

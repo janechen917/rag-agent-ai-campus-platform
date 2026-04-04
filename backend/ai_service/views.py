@@ -464,6 +464,26 @@ def _build_course_context(course):
 
 
 def _generate_debate_claim(topic: str, course_context: str = '') -> str:
+    def _is_invalid_claim_text(text: str) -> bool:
+        if not text:
+            return True
+        invalid_markers = [
+            '你好！我是AI学习导师',
+            '当前状态：',
+            'AI智能服务暂时运行在基础模式下',
+            '请告诉我：',
+        ]
+        return any(marker in text for marker in invalid_markers)
+
+    def _build_local_claim(seed_topic: str) -> str:
+        templates = [
+            '我坚持认为“{topic}”被高估了，短期收益看似明显，但长期会降低学习质量与独立思考能力。',
+            '我的立场是：在大多数课堂场景里，“{topic}”并非最优解，因为它牺牲了可迁移能力与知识深度。',
+            '我主张“{topic}”应被谨慎限制使用，效率提升只是表象，真正代价是理解力和推理能力被削弱。',
+            '我认为“{topic}”不是学习加速器，而是认知捷径陷阱，越依赖越难形成稳定的知识结构。',
+        ]
+        return random.choice(templates).format(topic=seed_topic)
+
     prompt = (
         '你是课堂辩论赛中的 AI 对手。请针对下面辩题，给出一句具有争议性的立场陈述。'
         '要求：1）观点要鲜明可反驳；2）字数 40-90；3）不输出编号或解释。\n\n'
@@ -473,9 +493,11 @@ def _generate_debate_claim(topic: str, course_context: str = '') -> str:
     try:
         result = ai_service.chat(prompt, [], mode='direct').strip()
         result = re.sub(r'^\s*[\-\d\.、:：]+', '', result)
-        return result[:300] if result else f'我坚持认为：{topic}，因为这能让学习效率最大化。'
+        if _is_invalid_claim_text(result):
+            return _build_local_claim(topic)
+        return result[:300] if result else _build_local_claim(topic)
     except Exception:
-        return f'我坚持认为：{topic}，因为这能让学习效率最大化。'
+        return _build_local_claim(topic)
 
 
 def _evaluate_argument(argument: str, topic: str, ai_claim: str, course_context: str = '') -> dict:
@@ -574,7 +596,10 @@ AI观点：{ai_claim}
 """
     try:
         result = ai_service.chat(prompt, [], mode='direct').strip()
-        return result[:320] if result else '你的反驳有亮点，但证据还不够硬。你能给出更直接的教材依据吗？'
+        invalid_markers = ['你好！我是AI学习导师', '当前状态：', '请告诉我：']
+        if not result or any(marker in result for marker in invalid_markers):
+            return '你的反驳有亮点，但证据还不够硬。你能给出更直接的教材依据吗？'
+        return result[:320]
     except Exception:
         return '你的反驳有亮点，但证据还不够硬。你能给出更直接的教材依据吗？'
 
@@ -1462,6 +1487,40 @@ def debate_attack(request, match_id):
     })
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def debate_quit(request, match_id):
+    """退出当前辩论对战"""
+    try:
+        match = DebateMatch.objects.get(id=match_id, student=request.user)
+    except DebateMatch.DoesNotExist:
+        return Response({'error': '对战不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+    if match.status != 'ongoing':
+        return Response({'error': '该对战已结束'}, status=status.HTTP_400_BAD_REQUEST)
+
+    match.status = 'lost'
+    match.save(update_fields=['status', 'updated_at'])
+    return Response({'message': '已退出当前对战', 'match_id': match.id, 'status': match.status})
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def debate_delete(request, match_id):
+    """隐藏指定辩论对战记录（不影响累计统计）"""
+    try:
+        match = DebateMatch.objects.get(id=match_id, student=request.user)
+    except DebateMatch.DoesNotExist:
+        return Response({'error': '对战不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+    if match.is_hidden:
+        return Response({'message': '战绩已隐藏', 'match_id': match_id}, status=status.HTTP_200_OK)
+
+    match.is_hidden = True
+    match.save(update_fields=['is_hidden', 'updated_at'])
+    return Response({'message': '战绩已隐藏', 'match_id': match_id}, status=status.HTTP_200_OK)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def debate_profile(request):
@@ -1471,8 +1530,9 @@ def debate_profile(request):
     wins = matches.filter(status='won').count()
     best_attack = matches.aggregate(v=Avg('best_attack'))['v'] or 0
 
-    latest_ongoing = matches.filter(status='ongoing').first()
-    recent_matches = matches.order_by('-created_at')[:8]
+    visible_matches = matches.filter(is_hidden=False)
+    latest_ongoing = visible_matches.filter(status='ongoing').first()
+    recent_matches = visible_matches.order_by('-created_at')[:8]
     recent_data = [
         {
             'id': m.id,

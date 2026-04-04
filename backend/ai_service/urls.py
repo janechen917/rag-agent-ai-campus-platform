@@ -7,7 +7,7 @@ from .views import (
     quiz_by_share_code, submit_quiz, quiz_submissions, delete_quiz, course_quizzes,
     quiz_statistics, my_quiz_submissions, teacher_analytics, pending_quizzes,
     quiz_reminder_logs, send_quiz_reminder_now,
-    debate_start, debate_attack, debate_profile
+    debate_start, debate_attack, debate_profile, debate_quit, debate_delete
 )
 
 router = DefaultRouter()
@@ -25,6 +25,8 @@ urlpatterns = [
     path('colosseum/profile/', debate_profile, name='debate_profile'),
     path('colosseum/match/start/', debate_start, name='debate_start'),
     path('colosseum/match/<int:match_id>/attack/', debate_attack, name='debate_attack'),
+    path('colosseum/match/<int:match_id>/quit/', debate_quit, name='debate_quit'),
+    path('colosseum/match/<int:match_id>/delete/', debate_delete, name='debate_delete'),
 
     # Quiz相关
     path('quiz/generate/', upload_and_generate_quiz, name='generate_quiz'),

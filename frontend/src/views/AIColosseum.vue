@@ -71,6 +71,7 @@
               发动反驳
             </el-button>
             <el-button @click="startMatch(true)">再开一局</el-button>
+            <el-button type="danger" plain :disabled="isAttacking || isStarting" @click="quitMatch">退出本局</el-button>
           </div>
 
           <div class="battle-log">
@@ -111,6 +112,7 @@
             <div class="meta">
               <el-tag size="small" :type="statusTagType(item.status)">{{ statusLabel(item.status) }}</el-tag>
               <span>最高攻击力 {{ item.best_attack }}</span>
+              <el-button size="small" text type="danger" @click="deleteRecentMatch(item)">删除</el-button>
             </div>
           </div>
         </div>
@@ -123,7 +125,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 
 const router = useRouter()
@@ -261,6 +263,58 @@ const submitAttack = async () => {
     ElMessage.error(e.response?.data?.error || '攻击失败')
   } finally {
     isAttacking.value = false
+  }
+}
+
+const quitMatch = async () => {
+  if (!currentMatch.value) return
+  if (currentMatch.value.status !== 'ongoing') {
+    currentMatch.value = null
+    battleRounds.value = []
+    latestAttack.value = 0
+    argumentInput.value = ''
+    return
+  }
+
+  try {
+    await api.post(`/api/ai/colosseum/match/${currentMatch.value.id}/quit/`)
+    ElMessage.success('已退出当前对战，你可以重新开局')
+    currentMatch.value = null
+    battleRounds.value = []
+    latestAttack.value = 0
+    argumentInput.value = ''
+    await loadProfile()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '退出失败')
+  }
+}
+
+const deleteRecentMatch = async (match) => {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除这条战绩吗？\n辩题：${match.topic}`,
+      '删除确认',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await api.delete(`/api/ai/colosseum/match/${match.id}/delete/`)
+    ElMessage.success('战绩已从最近列表移除')
+
+    if (currentMatch.value?.id === match.id) {
+      currentMatch.value = null
+      battleRounds.value = []
+      latestAttack.value = 0
+      argumentInput.value = ''
+    }
+
+    await loadProfile()
+  } catch (e) {
+    if (e === 'cancel' || e === 'close') return
+    ElMessage.error(e.response?.data?.error || '删除失败')
   }
 }
 
