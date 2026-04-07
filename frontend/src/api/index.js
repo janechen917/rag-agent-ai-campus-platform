@@ -17,6 +17,22 @@ const getBaseURL = () => {
   }
 }
 
+export const buildApiUrl = (path) => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const baseURL = getBaseURL()
+
+  if (!baseURL) {
+    return normalizedPath
+  }
+
+  // 防止 baseURL 结尾 /api 与 path 开头 /api 重复
+  if (/\/api$/.test(baseURL) && /^\/api\//.test(normalizedPath)) {
+    return `${baseURL}${normalizedPath.replace(/^\/api/, '')}`
+  }
+
+  return `${baseURL}${normalizedPath}`
+}
+
 const api = axios.create({
   baseURL: getBaseURL(),
   timeout: 300000,  // 300秒，AI Quiz生成需要较长时间

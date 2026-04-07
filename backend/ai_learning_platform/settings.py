@@ -37,6 +37,10 @@ if not DEBUG:
 else:
     ALLOWED_HOSTS = ['*']  # 开发环境允许所有主机
 
+# 在反向代理（如 Railway）后正确识别 https，避免 build_absolute_uri 生成 http 链接
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+
 # Application definition
 INSTALLED_APPS = [
     'daphne',  # ASGI server for channels

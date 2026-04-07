@@ -33,6 +33,12 @@ const routes = [
     meta: { title: '创建课程', requiresAuth: true, requiresRole: 'teacher' }
   },
   {
+    path: '/edit-course/:id',
+    name: 'EditCourse',
+    component: () => import('@/views/EditCourse.vue'),
+    meta: { title: '编辑课程', requiresAuth: true, requiresRole: 'teacher' }
+  },
+  {
     path: '/my-courses',
     name: 'MyCourses',
     component: () => import('@/views/TeacherCourses.vue'),

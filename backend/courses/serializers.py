@@ -137,7 +137,10 @@ class CourseListSerializer(serializers.ModelSerializer):
     instructor_name = serializers.CharField(source='instructor.username', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     level_display = serializers.CharField(source='get_level_display', read_only=True)
-    
+    image = serializers.SerializerMethodField()
+    syllabus = serializers.SerializerMethodField()
+    materials = serializers.SerializerMethodField()
+
     class Meta:
         model = Course
         fields = [
@@ -146,6 +149,25 @@ class CourseListSerializer(serializers.ModelSerializer):
             'price', 'original_price', 'duration_hours', 'students_count',
             'rating', 'is_published', 'syllabus', 'materials', 'created_at'
         ]
+
+    def _build_file_url(self, file_field):
+        if not file_field:
+            return None
+
+        url = file_field.url
+        request = self.context.get('request')
+        if request and not url.startswith('http'):
+            return request.build_absolute_uri(url)
+        return url
+
+    def get_image(self, obj):
+        return self._build_file_url(obj.image)
+
+    def get_syllabus(self, obj):
+        return self._build_file_url(obj.syllabus)
+
+    def get_materials(self, obj):
+        return self._build_file_url(obj.materials)
 
 
 class CourseDetailSerializer(serializers.ModelSerializer):
@@ -156,7 +178,10 @@ class CourseDetailSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     level_display = serializers.CharField(source='get_level_display', read_only=True)
     reviews_count = serializers.SerializerMethodField()
-    
+    image = serializers.SerializerMethodField()
+    syllabus = serializers.SerializerMethodField()
+    materials = serializers.SerializerMethodField()
+
     class Meta:
         model = Course
         fields = [
@@ -167,7 +192,26 @@ class CourseDetailSerializer(serializers.ModelSerializer):
             'chapters', 'files', 'reviews_count', 'syllabus', 'materials',
             'created_at', 'updated_at'
         ]
-    
+
+    def _build_file_url(self, file_field):
+        if not file_field:
+            return None
+
+        url = file_field.url
+        request = self.context.get('request')
+        if request and not url.startswith('http'):
+            return request.build_absolute_uri(url)
+        return url
+
+    def get_image(self, obj):
+        return self._build_file_url(obj.image)
+
+    def get_syllabus(self, obj):
+        return self._build_file_url(obj.syllabus)
+
+    def get_materials(self, obj):
+        return self._build_file_url(obj.materials)
+
     def get_reviews_count(self, obj):
         return obj.reviews.count()
 

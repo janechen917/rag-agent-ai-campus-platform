@@ -107,7 +107,7 @@
                 <el-button 
                   size="small" 
                   type="primary" 
-                  link 
+                  class="upload-trigger"
                   @click="showUploadDialog(course)"
                   style="margin-left: auto;"
                 >
@@ -244,7 +244,7 @@
         <el-form-item v-if="uploadForm.file_type !== 'quiz'" label="选择文件">
           <el-upload
             ref="uploadRef"
-            :action="`/api/courses/course/${currentCourse?.id}/upload_file/`"
+            :action="uploadAction"
             :headers="{ Authorization: `Token ${userStore.token}` }"
             :data="uploadForm"
             :on-success="handleFileUploadSuccess"
@@ -281,7 +281,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
-import api from '@/api'
+import api, { buildApiUrl } from '@/api'
 import {
   Plus, User, Clock, Star, Folder, Document, Files, View, Edit, Delete, Upload, Download, Message, Link
 } from '@element-plus/icons-vue'
@@ -294,6 +294,10 @@ const uploadDialogVisible = ref(false)
 const currentCourse = ref(null)
 const uploadRef = ref(null)
 const uploading = ref(false)
+const uploadAction = computed(() => {
+  if (!currentCourse.value?.id) return ''
+  return buildApiUrl(`/api/courses/course/${currentCourse.value.id}/upload_file/`)
+})
 const uploadForm = ref({
   file_type: 'material',
   description: '',
@@ -470,7 +474,8 @@ const handleFileUploadSuccess = (response) => {
 // 文件上传失败
 const handleUploadError = (error) => {
   console.error('文件上传失败:', error)
-  ElMessage.error('文件上传失败，请重试')
+  const serverError = error?.response?.data?.error || error?.message
+  ElMessage.error(serverError || '文件上传失败，请重试')
   uploading.value = false
 }
 
@@ -771,5 +776,9 @@ onMounted(() => {
 .course-actions .el-button {
   flex: 1;
   min-width: 80px;
+}
+
+.upload-trigger {
+  color: #ffffff !important;
 }
 </style>
