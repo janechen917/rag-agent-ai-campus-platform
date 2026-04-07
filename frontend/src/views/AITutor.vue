@@ -1018,6 +1018,7 @@ onMounted(() => {
 
 .message .content {
   max-width: 70%;
+  min-width: 0;
 }
 
 .message.user .content {
@@ -1047,6 +1048,28 @@ onMounted(() => {
 .message .text {
   line-height: 1.6;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.message .text :deep(p),
+.message .text :deep(ul),
+.message .text :deep(ol),
+.message .text :deep(li),
+.message .text :deep(blockquote) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.message .text :deep(ul),
+.message .text :deep(ol) {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+
+.message .text :deep(li) {
+  margin: 0.25em 0;
 }
 
 .message .text :deep(pre) {
