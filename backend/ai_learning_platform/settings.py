@@ -222,7 +222,15 @@ else:
 CORS_ALLOW_CREDENTIALS = True
 
 # AI服务配置
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '') or os.getenv('GITHUB_TOKEN', '')
+# 兼容多种部署环境变量命名：
+# - OPENAI_API_KEY: OpenAI 或 GitHub Models token
+# - GITHUB_MODEL_API_KEY: 部署文档里使用的 GitHub Models token
+# - GITHUB_TOKEN: 兼容旧配置
+OPENAI_API_KEY = (
+    os.getenv('OPENAI_API_KEY', '')
+    or os.getenv('GITHUB_MODEL_API_KEY', '')
+    or os.getenv('GITHUB_TOKEN', '')
+)
 AI_MODEL_NAME = os.getenv('AI_MODEL_NAME', 'gpt-4o-mini')
 
 # GitHub Models配置（免费使用AI模型）

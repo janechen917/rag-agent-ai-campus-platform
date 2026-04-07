@@ -50,6 +50,7 @@ def check_config():
         print(f"✓ OPENAI_API_KEY:        {masked_key}")
     else:
         print(f"✗ OPENAI_API_KEY:        未配置")
+        print(f"  兼容变量: OPENAI_API_KEY / GITHUB_MODEL_API_KEY / GITHUB_TOKEN")
     
     print(f"  AI_MODEL_NAME:         {settings.AI_MODEL_NAME}")
     print(f"  USE_GITHUB_MODELS:     {settings.USE_GITHUB_MODELS}")

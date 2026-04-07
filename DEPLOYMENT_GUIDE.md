@@ -83,6 +83,7 @@ DATABASE_URL=<自动提供>
 CORS_ALLOWED_ORIGINS=https://your-frontend-domain.vercel.app,http://localhost:3000
 
 # AI 配置
+# 两种写法都支持，按你在 Railway / 环境变量里配置的其一即可：
 OPENAI_API_KEY=sk-xxxxxx
 # 或使用 GitHub Models
 GITHUB_MODEL_API_KEY=your-github-models-key

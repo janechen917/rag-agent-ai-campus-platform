@@ -385,6 +385,7 @@ npm run dev
    ```env
    USE_GITHUB_MODELS=True
    OPENAI_API_KEY=ghp_your_github_token_here
+   # 也兼容 GITHUB_MODEL_API_KEY=ghp_your_github_token_here
    OPENAI_API_BASE=https://models.inference.ai.azure.com
    AI_MODEL_NAME=gpt-4o-mini
    ```
