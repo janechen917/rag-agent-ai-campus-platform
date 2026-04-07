@@ -32,7 +32,7 @@
       <el-row :gutter="20" v-if="currentCourses.length > 0">
         <el-col :span="8" v-for="course in currentCourses" :key="course.id">
           <el-card class="course-card" shadow="hover">
-            <img :src="course.image || '/placeholder-course.png'" class="course-image" />
+            <img :src="resolveCourseImage(course.image)" class="course-image" />
             
             <div class="course-content">
               <h3>{{ course.title }}</h3>
@@ -159,7 +159,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import api from '@/api'
+import api, { buildApiUrl } from '@/api'
 import {
   Search, User, UserFilled, Star, Document
 } from '@element-plus/icons-vue'
@@ -182,11 +182,24 @@ const requestForm = ref({
 })
 const submitting = ref(false)
 
+const normalizeListData = (payload) => {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.results)) return payload.results
+  return []
+}
+
+const resolveCourseImage = (image) => {
+  if (!image) return '/placeholder-course.png'
+  if (/^https?:\/\//.test(image)) return image
+  const normalizedPath = image.startsWith('/') ? image : `/${image}`
+  return buildApiUrl(normalizedPath)
+}
+
 // 获取所有课程
 const loadAllCourses = async () => {
   try {
     const response = await api.get('/api/courses/course/')
-    allCourses.value = response.data.results || response.data || []
+    allCourses.value = normalizeListData(response.data)
     currentCourses.value = allCourses.value
   } catch (error) {
     console.error('获取课程列表失败:', error)
@@ -209,7 +222,7 @@ const searchCourses = async () => {
     const response = await api.get('/api/courses/course/search_courses/', {
       params: { q: searchQuery.value }
     })
-    searchResults.value = response.data.results || []
+    searchResults.value = normalizeListData(response.data)
     currentCourses.value = searchResults.value
     
     if (searchResults.value.length === 0) {
@@ -242,8 +255,7 @@ const loadMyRequests = async () => {
   try {
     // 先尝试使用正确的路径
     const response = await api.get('/api/courses/course-requests/')
-    // API返回分页格式，需要使用results字段
-    myRequests.value = response.data.results || response.data || []
+    myRequests.value = normalizeListData(response.data)
   } catch (error) {
     console.error('获取申请记录失败:', error)
     // 如果API不存在，设置为空数组
@@ -255,7 +267,7 @@ const loadMyRequests = async () => {
 const loadMyEnrollments = async () => {
   try {
     const response = await api.get('/api/courses/course-enrollments/')
-    myEnrollments.value = response.data || []
+    myEnrollments.value = normalizeListData(response.data)
   } catch (error) {
     console.error('获取选课记录失败:', error)
     // 如果API不存在，设置为空数组
@@ -265,12 +277,12 @@ const loadMyEnrollments = async () => {
 
 // 检查是否已经选课
 const isEnrolled = (courseId) => {
-  return myEnrollments.value.some(e => e.course.id === courseId)
+  return myEnrollments.value.some(e => e?.course?.id === courseId)
 }
 
 // 检查是否已经申请
 const hasRequested = (courseId) => {
-  return myRequests.value.some(r => r.course.id === courseId && r.status === 'pending')
+  return myRequests.value.some(r => r?.course?.id === courseId && r?.status === 'pending')
 }
 
 // 显示申请对话框

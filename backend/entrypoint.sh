@@ -20,15 +20,10 @@ fi
 
 PORT_TO_USE="${PORT:-8000}"
 echo ""
-echo "Starting Gunicorn on 0.0.0.0:${PORT_TO_USE}..."
+echo "Starting Daphne (ASGI) on 0.0.0.0:${PORT_TO_USE}..."
 echo "=========================================="
 
-exec gunicorn \
-    --bind "0.0.0.0:${PORT_TO_USE}" \
-    --workers 2 \
-    --worker-class sync \
-    --timeout 120 \
-    --access-logfile - \
-    --error-logfile - \
-    --log-level info \
-    ai_learning_platform.wsgi:application
+exec daphne \
+    -b 0.0.0.0 \
+    -p "${PORT_TO_USE}" \
+    ai_learning_platform.asgi:application

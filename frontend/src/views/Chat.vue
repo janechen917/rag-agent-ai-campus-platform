@@ -606,7 +606,14 @@ onMounted(async () => {
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const defaultWsUrl = `${protocol}://${window.location.host}/ws/chat/`
+  const backendHttpBase = (import.meta.env.VITE_API_BASE_URL || 'https://groupprojectteam11back-production.up.railway.app')
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/api$/, '')
+  const backendWsBase = backendHttpBase.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
+  const defaultWsUrl = import.meta.env.PROD
+    ? `${backendWsBase}/ws/chat/`
+    : `${protocol}://${window.location.host}/ws/chat/`
   const wsUrl = import.meta.env.VITE_WS_URL || defaultWsUrl
 
   websocketService.connect(wsUrl, token)

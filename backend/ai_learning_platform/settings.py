@@ -5,6 +5,7 @@ Django settings for ai_learning_platform project.
 import os
 import dj_database_url
 from pathlib import Path
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -32,6 +33,17 @@ if not DEBUG:
     railway_public_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN', '').strip()
     if railway_public_domain and railway_public_domain not in parsed_hosts:
         parsed_hosts.append(railway_public_domain)
+
+    # WebSocket 来源通常来自前端域名（Vercel），需要在 ALLOWED_HOSTS 中允许。
+    frontend_url = os.getenv('FRONTEND_URL', '').strip()
+    if frontend_url:
+        frontend_host = urlparse(frontend_url).hostname
+        if frontend_host and frontend_host not in parsed_hosts:
+            parsed_hosts.append(frontend_host)
+
+    # 允许 Vercel 子域名，支持生产别名和预览域名。
+    if '.vercel.app' not in parsed_hosts:
+        parsed_hosts.append('.vercel.app')
 
     ALLOWED_HOSTS = parsed_hosts or ['localhost']
 else:
