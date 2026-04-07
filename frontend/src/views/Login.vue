@@ -247,32 +247,34 @@ const registerRules = {
 }
 
 const handleLogin = async () => {
-  await loginFormRef.value?.validate(async (valid) => {
-    if (valid) {
-      loading.value = true
-      try {
-        const result = await userStore.login({
-          username: loginForm.value.username,
-          password: loginForm.value.password
-        })
-        
-        if (result.success) {
-          ElMessage.success('登录成功')
-          // 根据用户类型跳转到不同页面
-          const userType = userStore.user?.user_type || 'student'
-          if (userType === 'teacher') {
-            router.push('/teacher-home')
-          } else {
-            router.push('/student-home')
-          }
-        } else {
-          ElMessage.error(result.error)
-        }
-      } finally {
-        loading.value = false
-      }
+  const valid = await loginFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  loading.value = true
+  try {
+    const result = await userStore.login({
+      username: loginForm.value.username,
+      password: loginForm.value.password
+    })
+
+    if (!result.success) {
+      ElMessage.error(result.error)
+      return
     }
-  })
+
+    ElMessage.success('登录成功')
+    const userType = userStore.user?.user_type || 'student'
+    const targetPath = userType === 'teacher' ? '/teacher-home' : '/student-home'
+
+    try {
+      await router.replace(targetPath)
+    } catch (error) {
+      // 路由守卫异常时兜底，避免停留在登录页。
+      window.location.href = targetPath
+    }
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleRegister = async () => {
@@ -281,28 +283,27 @@ const handleRegister = async () => {
     return
   }
 
-  await registerFormRef.value?.validate(async (valid) => {
-    if (valid) {
-      loading.value = true
-      try {
-        const result = await userStore.register({
-          username: registerForm.value.username,
-          email: registerForm.value.email,
-          password: registerForm.value.password,
-          user_type: registerForm.value.userType
-        })
-        
-        if (result.success) {
-          ElMessage.success('注册成功，请登录')
-          activeTab.value = 'login'
-        } else {
-          ElMessage.error(result.error)
-        }
-      } finally {
-        loading.value = false
-      }
+  const valid = await registerFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  loading.value = true
+  try {
+    const result = await userStore.register({
+      username: registerForm.value.username,
+      email: registerForm.value.email,
+      password: registerForm.value.password,
+      user_type: registerForm.value.userType
+    })
+
+    if (result.success) {
+      ElMessage.success('注册成功，请登录')
+      activeTab.value = 'login'
+    } else {
+      ElMessage.error(result.error)
     }
-  })
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
