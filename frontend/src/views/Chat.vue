@@ -138,7 +138,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ChatDotRound, User, UserFilled, Promotion, Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -147,6 +147,7 @@ import api from '@/api'
 
 const userStore = useUserStore()
 const route = useRoute()
+const router = useRouter()
 
 const activeTab = ref('private')
 const newMessage = ref('')
@@ -595,6 +596,17 @@ onMounted(async () => {
   const token = userStore.token || localStorage.getItem('token')
   if (!token) {
     ElMessage.error('请先登录')
+    router.push('/login')
+    return
+  }
+
+  // 先校验 token 是否可用，避免 WebSocket 在握手前即被服务端拒绝。
+  try {
+    await api.get('/api/auth/profile/')
+  } catch (error) {
+    ElMessage.error('登录状态已失效，请重新登录')
+    userStore.logout()
+    router.push('/login')
     return
   }
 
