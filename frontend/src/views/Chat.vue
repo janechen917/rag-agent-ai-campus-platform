@@ -592,7 +592,7 @@ const handleWebSocketMessage = (data) => {
 }
 
 onMounted(async () => {
-  const token = userStore.token
+  const token = userStore.token || localStorage.getItem('token')
   if (!token) {
     ElMessage.error('请先登录')
     return

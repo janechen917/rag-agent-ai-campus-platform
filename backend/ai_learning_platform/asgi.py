@@ -5,7 +5,6 @@ ASGI config for ai_learning_platform project.
 import os
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.security.websocket import AllowedHostsOriginValidator
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ai_learning_platform.settings')
 
@@ -17,11 +16,10 @@ from chat.middleware import TokenAuthMiddleware
 
 application = ProtocolTypeRouter({
     'http': django_asgi_app,
-    'websocket': AllowedHostsOriginValidator(
-        TokenAuthMiddleware(
-            URLRouter(
-                websocket_urlpatterns
-            )
+    # 使用 TokenAuthMiddleware 进行鉴权；避免生产反向代理下来源校验误拦截 WebSocket 握手。
+    'websocket': TokenAuthMiddleware(
+        URLRouter(
+            websocket_urlpatterns
         )
     ),
 })

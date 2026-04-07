@@ -57,8 +57,8 @@ class WebSocketService {
         this.isConnecting = false
       }
 
-      this.ws.onclose = () => {
-        console.log('WebSocket连接关闭')
+      this.ws.onclose = (event) => {
+        console.log(`WebSocket连接关闭 code=${event.code} reason=${event.reason || 'none'}`)
         this.isConnecting = false
         if (this.shouldReconnect) {
           this.attemptReconnect(url, token)
