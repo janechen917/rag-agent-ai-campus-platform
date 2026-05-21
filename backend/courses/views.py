@@ -174,6 +174,13 @@ class CourseViewSet(viewsets.ModelViewSet):
             )
         
         uploaded_file = request.FILES['file']
+
+        # 同名文件校验：避免重复上传导致 RAG 索引出现重复 chunks
+        if CourseFile.objects.filter(course=course, file_name=uploaded_file.name).exists():
+            return Response(
+                {'error': f'课程中已存在同名文件 "{uploaded_file.name}"，请先删除旧版本或重命名后再上传'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # 创建CourseFile对象
         course_file = CourseFile.objects.create(
@@ -187,6 +194,26 @@ class CourseViewSet(viewsets.ModelViewSet):
         )
         
         serializer = CourseFileSerializer(course_file, context={'request': request})
+        # 后台异步增量索引（仅当上传文件可被 RAG 解析时）
+        try:
+            from django.conf import settings as _settings
+            import os, threading, logging
+            _logger = logging.getLogger(__name__)
+            ext = os.path.splitext(uploaded_file.name)[1].lower()
+            if ext in getattr(_settings, 'RAG_SUPPORTED_EXTS', []):
+                file_path = course_file.file.path
+                source_name = course_file.file_name
+                cid = course.id
+                def _append_index():
+                    try:
+                        from ai_service.rag import add_file_to_course_index
+                        result = add_file_to_course_index(cid, file_path, source_name)
+                        _logger.info(f'[RAG] auto-append course={cid} result={result}')
+                    except Exception as e:
+                        _logger.exception(f'[RAG] auto-append failed course={cid}: {e}')
+                threading.Thread(target=_append_index, daemon=True).start()
+        except Exception:
+            pass
         return Response({
             'message': '文件上传成功',
             'file': serializer.data

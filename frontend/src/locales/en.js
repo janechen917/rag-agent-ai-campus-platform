@@ -126,5 +126,17 @@ export default {
     teacherCommunicationDesc: 'The community chat room is available. Communicate with students in real time.',
     ratingScore: 'Rating: ',
     ratingScale: '/5'
+  },
+  aiTutor: {
+    selectCoursePlaceholder: 'Select a related course (optional, helps AI guidance)',
+    courseMaterialMode: 'Course Material Mode',
+    ragModeOn: 'Enabled: answers grounded in course materials (with citations)',
+    ragModeOff: 'Disabled: use general AI chat',
+    sourcesTitle: 'Sources ({n})',
+    page: 'p.',
+    errors: {
+      noIndex: 'This course has no material index yet. Please ask the teacher to build the index.',
+      ragFailed: 'Course material retrieval failed. Please try again later.'
+    }
   }
 }

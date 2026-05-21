@@ -44,6 +44,21 @@
               <span>{{ message.fileName }}</span>
             </div>
             <div class="text" v-html="formatMessage(message.content)"></div>
+            <div v-if="message.sources && message.sources.length" class="rag-sources">
+              <el-collapse>
+                <el-collapse-item :title="$t('aiTutor.sourcesTitle', { n: message.sources.length })">
+                  <div v-for="(src, i) in message.sources" :key="i" class="rag-source-item">
+                    <div class="rag-source-meta">
+                      <el-icon><Document /></el-icon>
+                      <strong>[{{ i + 1 }}]</strong>
+                      <span>{{ src.file }}</span>
+                      <span v-if="src.page" class="rag-source-page">{{ $t('aiTutor.page') }} {{ src.page }}</span>
+                    </div>
+                    <div class="rag-source-snippet">{{ src.snippet }}</div>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
+            </div>
             <div class="time">{{ formatTime(message.timestamp) }}</div>
           </div>
         </div>
@@ -83,7 +98,7 @@
         <div v-if="!isTeacher" class="course-selector-bar">
           <el-select
             v-model="selectedCourseId"
-            placeholder="请选择相关课程（可选，有助于AI精准引导）"
+            :placeholder="$t('aiTutor.selectCoursePlaceholder')"
             clearable
             style="flex: 1"
             size="default"
@@ -95,6 +110,15 @@
               :value="course.id"
             />
           </el-select>
+          <el-tooltip :content="useRagMode ? $t('aiTutor.ragModeOn') : $t('aiTutor.ragModeOff')" placement="top">
+            <el-switch
+              v-model="useRagMode"
+              :disabled="!selectedCourseId"
+              :active-text="$t('aiTutor.courseMaterialMode')"
+              size="default"
+              style="margin-left: 12px"
+            />
+          </el-tooltip>
         </div>
         
         <div v-if="uploadedFileInfo" class="image-attachment-bar">
@@ -483,6 +507,7 @@
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { Delete, Promotion, Cpu, Back, Upload, CircleCheck, CircleClose, Picture, Close, Document, ChatLineSquare, ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -491,6 +516,7 @@ import api from '@/api'
 
 const router = useRouter()
 const userStore = useUserStore()
+const { t } = useI18n()
 
 // --- Chat state ---
 const messages = ref([])
@@ -515,6 +541,7 @@ const enrolledCourses = ref([])
 const selectedCourseId = ref(null)
 const currentConversationId = ref(null)
 const aiMode = ref('socratic') // 'socratic' | 'direct'
+const useRagMode = ref(false) // 课程材料模式（基于 RAG 索引回答）
 
 // --- Quiz state ---
 const isTeacher = computed(() => userStore.user?.user_type === 'teacher')
@@ -595,7 +622,34 @@ const sendMessage = async (message) => {
 
   try {
     let response
-    if (hasFile) {
+    if (useRagMode.value && selectedCourseId.value && !hasFile) {
+      // 课程材料模式：基于 RAG 索引回答
+      response = await api.post('/api/ai/rag/ask/', {
+        course_id: selectedCourseId.value,
+        question: message
+      }, { timeout: 120000 })
+      const data = response.data || {}
+      if (data.code === 'NO_INDEX') {
+        messages.value.push({
+          role: 'assistant',
+          content: t('aiTutor.errors.noIndex'),
+          timestamp: Date.now()
+        })
+      } else if (data.code) {
+        messages.value.push({
+          role: 'assistant',
+          content: data.error || t('aiTutor.errors.ragFailed'),
+          timestamp: Date.now()
+        })
+      } else {
+        messages.value.push({
+          role: 'assistant',
+          content: data.answer,
+          sources: data.sources || [],
+          timestamp: Date.now()
+        })
+      }
+    } else if (hasFile) {
       const formData = new FormData()
       formData.append('message', message)
       formData.append('file', uploadedImageFile.value)
@@ -610,6 +664,8 @@ const sendMessage = async (message) => {
       uploadedImagePreview.value = null
       uploadedFileInfo.value = null
       if (imageUploadRef.value) imageUploadRef.value.clearFiles()
+      if (response.data.conversation_id) currentConversationId.value = response.data.conversation_id
+      messages.value.push({ role: 'assistant', content: response.data.response, timestamp: Date.now() })
     } else {
       response = await api.post('/api/ai/chat/', {
         message,
@@ -618,9 +674,9 @@ const sendMessage = async (message) => {
         course_id: selectedCourseId.value || null,
         mode: aiMode.value
       })
+      if (response.data.conversation_id) currentConversationId.value = response.data.conversation_id
+      messages.value.push({ role: 'assistant', content: response.data.response, timestamp: Date.now() })
     }
-    if (response.data.conversation_id) currentConversationId.value = response.data.conversation_id
-    messages.value.push({ role: 'assistant', content: response.data.response, timestamp: Date.now() })
   } catch (error) {
     console.error('AI chat error:', error)
     let errorContent = '抱歉，出现了一些问题。'
@@ -1167,6 +1223,34 @@ onMounted(() => {
   background: #f5f7fa;
   border-radius: 8px;
   border: 1px solid #e4e7ed;
+}
+
+.rag-sources {
+  margin-top: 8px;
+}
+.rag-source-item {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: #fafafa;
+  border-left: 3px solid #409eff;
+  border-radius: 4px;
+}
+.rag-source-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #303133;
+  margin-bottom: 4px;
+}
+.rag-source-page {
+  color: #909399;
+  font-size: 12px;
+}
+.rag-source-snippet {
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.5;
 }
 
 .input-row {

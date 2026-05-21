@@ -185,7 +185,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+        # 不要启用 SessionAuthentication：前端是独立 SPA 使用 Token 认证，
+        # 启用 Session 会触发 CSRF 校验导致跨域 POST 失败。
+        # /admin 后台用的是 Django 自带 session，不受影响。
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
@@ -221,6 +223,21 @@ else:
 
 CORS_ALLOW_CREDENTIALS = True
 
+# CSRF 受信来源（Django 4+ 要求）
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS = [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:3002',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:8000',
+        'http://127.0.0.1:8000',
+    ]
+else:
+    csrf_origins = os.getenv('CSRF_TRUSTED_ORIGINS', '')
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in csrf_origins.split(',') if o.strip()]
+
 # AI服务配置
 # 兼容多种部署环境变量命名：
 # - OPENAI_API_KEY: OpenAI 或 GitHub Models token
@@ -239,6 +256,24 @@ OPENAI_API_BASE = os.getenv('OPENAI_API_BASE', 'https://models.inference.ai.azur
 
 # FAISS向量数据库路径
 VECTOR_DB_PATH = BASE_DIR / 'vector_db'
+
+# ============ RAG（课程知识库）配置 ============
+# 每门课的 FAISS 索引存放目录：backend/vector_db/course_<id>/
+RAG_VECTOR_DB_ROOT = BASE_DIR / 'vector_db'
+RAG_VECTOR_DB_ROOT.mkdir(exist_ok=True)
+
+# 文本切片参数（每段 ~500 字符，相邻段重叠 50 字符防止语义断裂）
+RAG_CHUNK_SIZE = 500
+RAG_CHUNK_OVERLAP = 50
+
+# 检索时返回的相关片段数量（top-k）
+RAG_TOP_K = 4
+
+# 单个文档解析后的最大字符数（防超大 PDF 拖垮内存）
+RAG_MAX_DOC_CHARS = 500_000
+
+# 支持的文件后缀（小写）
+RAG_SUPPORTED_EXTS = {'.pdf', '.docx', '.pptx', '.md', '.txt'}
 
 # Celery配置
 CELERY_BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'

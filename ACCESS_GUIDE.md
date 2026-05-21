@@ -1,22 +1,49 @@
 # 🎯 应用访问指南
 
-## ✅ 服务状态
+<!--
+INDEX (供 AI / 编辑器快速定位，修改时仅读对应锚点块)
+- status            §1  服务状态
+- urls              §2  访问地址
+- urls-vscode       §2.1 VS Code 端口面板
+- urls-direct       §2.2 直接访问 URL
+- accounts          §3  测试账号
+- accounts-teacher  §3.1 教师账号
+- accounts-student  §3.2 学生账号
+- teacher-features  §4  教师端功能
+- troubleshoot      §5  白屏排查
+- done-features     §6  已完成功能
+- debug-cmd         §7  调试命令
+- help              §8  需要帮助
+
+规则：
+1. 修改某节时，grep `ANCHOR: <id>` 定位，仅读取该 BEGIN/END 之间内容。
+2. 新增章节请同步更新本 INDEX 与对应 ANCHOR/END 标记。
+3. 单个 ANCHOR 块控制在 ~80 行以内，过长请拆分子锚点。
+-->
+
+<!-- ANCHOR: status -->
+## §1 服务状态
 - ✅ 前端服务：运行中（端口 3002）
 - ✅ 后端服务：运行中（端口 8000）
 - ✅ CORS 配置：已更新支持 Codespaces
 - ✅ API 配置：已配置完整后端 URL
+<!-- END: status -->
 
-## 🌐 访问地址
+<!-- ANCHOR: urls -->
+## §2 访问地址
 
-### 方式一：通过 VS Code 端口面板（推荐）
+<!-- ANCHOR: urls-vscode -->
+### §2.1 方式一：通过 VS Code 端口面板（推荐）
 
 1. 在 VS Code 底部点击 **"端口"（PORTS）** 标签
 2. 找到端口：
    - **3002** - 前端服务
    - **8000** - 后端服务
 3. 点击端口 **3002** 旁边的 **🌐 地球图标**
+<!-- END: urls-vscode -->
 
-### 方式二：直接访问 URL
+<!-- ANCHOR: urls-direct -->
+### §2.2 方式二：直接访问 URL
 
 前端地址：
 ```
@@ -27,20 +54,29 @@ https://studious-system-pj4j55v7646p27w5j-3002.app.github.dev/
 ```
 https://studious-system-pj4j55v7646p27w5j-8000.app.github.dev/
 ```
+<!-- END: urls-direct -->
+<!-- END: urls -->
 
-## 👤 测试账号
+<!-- ANCHOR: accounts -->
+## §3 测试账号
 
-### 教师账号
+<!-- ANCHOR: accounts-teacher -->
+### §3.1 教师账号
 - 用户名：`teacher01`
-- 密码：`test123456`
+- 密码：`abc123`
 - 登录后访问：教学主页（创建课程、审批申请、查看私信）
+<!-- END: accounts-teacher -->
 
-### 学生账号
+<!-- ANCHOR: accounts-student -->
+### §3.2 学生账号
 - 用户名：`student01`
 - 密码：`test123456`
 - 登录后访问：学生主页（浏览课程、选课、学习、私信）
+<!-- END: accounts-student -->
+<!-- END: accounts -->
 
-## 🎨 教师端功能
+<!-- ANCHOR: teacher-features -->
+## §4 教师端功能
 
 访问前端后，使用教师账号登录，你会看到：
 
@@ -72,26 +108,30 @@ https://studious-system-pj4j55v7646p27w5j-8000.app.github.dev/
 - 待审批课程申请
 - 学生评价
 - 师生沟通入口
+<!-- END: teacher-features -->
 
-## 🔧 如果仍然白屏
+<!-- ANCHOR: troubleshoot -->
+## §5 如果仍然白屏
 
-### 1. 清除浏览器缓存
+### 5.1 清除浏览器缓存
 按 `Ctrl + Shift + R`（Windows/Linux）或 `Cmd + Shift + R`（Mac）
 
-### 2. 检查浏览器控制台
+### 5.2 检查浏览器控制台
 按 `F12` → Console 标签，查看是否有红色错误
 
-### 3. 确认 Token 存在
+### 5.3 确认 Token 存在
 在控制台执行：
 ```javascript
 localStorage.getItem('token')
 ```
 如果返回 `null`，请重新登录
 
-### 4. 重新登录
+### 5.4 重新登录
 访问 `/login` 页面，使用上面的测试账号重新登录
+<!-- END: troubleshoot -->
 
-## 📝 已完成的功能
+<!-- ANCHOR: done-features -->
+## §6 已完成的功能
 
 ✅ 教师端通知中心（可点击，实时统计）
 ✅ 课程申请审批通知
@@ -101,8 +141,10 @@ localStorage.getItem('token')
 ✅ 联系人列表（带未读角标）
 ✅ 会话历史
 ✅ 已读状态同步
+<!-- END: done-features -->
 
-## 🐛 调试命令
+<!-- ANCHOR: debug-cmd -->
+## §7 调试命令
 
 如需重启服务：
 
@@ -116,8 +158,10 @@ cd /workspaces/groupproject-team_11/backend
 source venv/bin/activate
 python manage.py runserver 0.0.0.0:8000
 ```
+<!-- END: debug-cmd -->
 
-## 📞 需要帮助？
+<!-- ANCHOR: help -->
+## §8 需要帮助？
 
 如果页面仍然显示空白，请：
 1. 截图浏览器控制台的错误信息
@@ -127,3 +171,4 @@ python manage.py runserver 0.0.0.0:8000
 ---
 
 **祝使用愉快！🎉**
+<!-- END: help -->

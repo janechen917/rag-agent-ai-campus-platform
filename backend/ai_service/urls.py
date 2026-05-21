@@ -7,7 +7,8 @@ from .views import (
     quiz_by_share_code, submit_quiz, quiz_submissions, delete_quiz, course_quizzes,
     quiz_statistics, my_quiz_submissions, teacher_analytics, pending_quizzes,
     quiz_reminder_logs, send_quiz_reminder_now,
-    debate_start, debate_attack, debate_profile, debate_quit, debate_delete
+    debate_start, debate_attack, debate_profile, debate_quit, debate_delete,
+    rag_ask, rag_build_index
 )
 
 router = DefaultRouter()
@@ -50,6 +51,10 @@ urlpatterns = [
     # Quiz提醒邮件
     path('quiz/<int:quiz_id>/reminder-logs/', quiz_reminder_logs, name='quiz_reminder_logs'),
     path('quiz/<int:quiz_id>/send-reminders/', send_quiz_reminder_now, name='send_quiz_reminder_now'),
+
+    # RAG 课程知识库
+    path('rag/ask/', rag_ask, name='rag_ask'),
+    path('rag/build_index/', rag_build_index, name='rag_build_index'),
 ]
 
 # 手动添加ViewSet的URL，避免格式后缀转换器冲突

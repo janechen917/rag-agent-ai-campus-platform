@@ -1686,3 +1686,59 @@ def send_quiz_reminder_now(request, quiz_id):
         'skipped': skipped,
         'failed': failed,
     })
+
+
+# ============ RAG 课程知识库 API ============
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def rag_ask(request):
+    """学生基于课程材料提问"""
+    course_id = request.data.get('course_id')
+    question = (request.data.get('question') or '').strip()
+
+    if not course_id:
+        return Response({'error': 'course_id 必填', 'code': 'MISSING_COURSE_ID'}, status=400)
+    if not question:
+        return Response({'error': '问题不能为空', 'code': 'EMPTY_QUESTION'}, status=400)
+
+    try:
+        course_id = int(course_id)
+    except (TypeError, ValueError):
+        return Response({'error': 'course_id 必须为整数', 'code': 'INVALID_COURSE_ID'}, status=400)
+
+    if not Course.objects.filter(id=course_id).exists():
+        return Response({'error': '课程不存在', 'code': 'COURSE_NOT_FOUND'}, status=404)
+
+    from .rag import ask_course
+    result = ask_course(course_id, question)
+    return Response(result)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def rag_build_index(request):
+    """教师重建某门课的 RAG 索引（仅讲师本人或超管可调用）"""
+    course_id = request.data.get('course_id')
+    if not course_id:
+        return Response({'error': 'course_id 必填', 'code': 'MISSING_COURSE_ID'}, status=400)
+    try:
+        course_id = int(course_id)
+    except (TypeError, ValueError):
+        return Response({'error': 'course_id 必须为整数', 'code': 'INVALID_COURSE_ID'}, status=400)
+
+    course = Course.objects.filter(id=course_id).first()
+    if not course:
+        return Response({'error': '课程不存在', 'code': 'COURSE_NOT_FOUND'}, status=404)
+
+    if not (request.user.is_superuser or course.instructor_id == request.user.id):
+        return Response({'error': '只有该课程的讲师可以重建索引', 'code': 'FORBIDDEN'}, status=403)
+
+    from .rag import build_course_index
+    try:
+        result = build_course_index(course_id)
+    except Exception as e:
+        logger.exception('build_course_index failed')
+        return Response({'error': f'建索引失败: {e}', 'code': 'BUILD_ERROR'}, status=500)
+    return Response(result)
+

@@ -126,5 +126,17 @@ export default {
     teacherCommunicationDesc: '當前系統已支援學習社區聊天室，可與學生實時交流。',
     ratingScore: '評分：',
     ratingScale: '/5'
+  },
+  aiTutor: {
+    selectCoursePlaceholder: '請選擇相關課程（可選，有助於AI精準引導）',
+    courseMaterialMode: '課程材料模式',
+    ragModeOn: '已啟用：基於課程材料回答（帶引用）',
+    ragModeOff: '關閉：使用通用 AI 對話',
+    sourcesTitle: '來源（{n} 條）',
+    page: '第',
+    errors: {
+      noIndex: '該課程尚未建立材料索引，請聯絡老師在後台執行索引建構。',
+      ragFailed: '課程材料檢索失敗，請稍後重試。'
+    }
   }
 }
