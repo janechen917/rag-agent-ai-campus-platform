@@ -4,6 +4,7 @@
 每门课一个独立索引：backend/vector_db/course_<id>/
 """
 import logging
+import time
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -124,9 +125,19 @@ def get_embeddings():
         from langchain_community.embeddings import HuggingFaceEmbeddings
         logger.info("加载本地 embedding 模型: paraphrase-multilingual-MiniLM-L12-v2")
         _embeddings_singleton = HuggingFaceEmbeddings(
-            model_name='paraphrase-multilingual-MiniLM-L12-v2'
+            model_name='paraphrase-multilingual-MiniLM-L12-v2',
+            # 生产/校园网环境常出现 huggingface.co 连通性抖动，
+            # 强制仅使用本地缓存可显著降低首包等待。
+            model_kwargs={'local_files_only': True}
         )
     return _embeddings_singleton
+
+
+def prewarm_embeddings() -> None:
+    """后台预热 embedding，降低首问冷启动耗时。"""
+    start = time.perf_counter()
+    get_embeddings()
+    logger.info(f'[RAG][TIMING] prewarm_embeddings_sec={time.perf_counter() - start:.3f}')
 
 
 def _split_documents(raw_docs: List[Dict], course_id: int, source_name: str):
@@ -350,7 +361,23 @@ def ask_course(course_id: int, question: str, top_k: Optional[int] = None) -> Di
     if not question:
         return {'error': '问题不能为空', 'code': 'EMPTY_QUESTION', 'course_id': course_id, 'question': question}
 
-    vs = _load_course_index(course_id)
+    timing_enabled = getattr(settings, 'RAG_TIMING_LOG_ENABLED', True)
+    request_start = time.perf_counter()
+
+    try:
+        index_start = time.perf_counter()
+        vs = _load_course_index(course_id)
+        if timing_enabled:
+            logger.info(f'[RAG][TIMING] course_id={course_id} load_index_sec={time.perf_counter() - index_start:.3f}')
+    except Exception as e:
+        logger.error(f'加载课程索引失败: {e}')
+        return {
+            'error': f'课程索引加载失败，请检查本地 embedding 缓存或网络策略：{e}',
+            'code': 'INDEX_LOAD_ERROR',
+            'course_id': course_id,
+            'question': question,
+        }
+
     if vs is None:
         return {
             'error': '该课程尚未建立知识库，请先让教师上传材料并建立索引',
@@ -361,7 +388,10 @@ def ask_course(course_id: int, question: str, top_k: Optional[int] = None) -> Di
 
     k = top_k or settings.RAG_TOP_K
     try:
+        search_start = time.perf_counter()
         hits = vs.similarity_search(question, k=k)
+        if timing_enabled:
+            logger.info(f'[RAG][TIMING] course_id={course_id} search_sec={time.perf_counter() - search_start:.3f} hits={len(hits)}')
     except Exception as e:
         logger.error(f'检索失败: {e}')
         return {'error': f'检索失败: {e}', 'code': 'SEARCH_ERROR', 'course_id': course_id, 'question': question}
@@ -375,12 +405,17 @@ def ask_course(course_id: int, question: str, top_k: Optional[int] = None) -> Di
             'model': settings.AI_MODEL_NAME,
             'temperature': 0.3,
             'api_key': settings.OPENAI_API_KEY,
+            'timeout': getattr(settings, 'RAG_LLM_TIMEOUT_SEC', 90),
+            'max_retries': getattr(settings, 'RAG_LLM_MAX_RETRIES', 1),
         }
         if getattr(settings, 'USE_GITHUB_MODELS', False) and getattr(settings, 'OPENAI_API_BASE', None):
             llm_kwargs['base_url'] = settings.OPENAI_API_BASE
         llm = ChatOpenAI(**llm_kwargs)
         from langchain_core.messages import HumanMessage
+        llm_start = time.perf_counter()
         resp = llm.invoke([HumanMessage(content=prompt)])
+        if timing_enabled:
+            logger.info(f'[RAG][TIMING] course_id={course_id} llm_sec={time.perf_counter() - llm_start:.3f}')
         answer = resp.content if hasattr(resp, 'content') else str(resp)
     except Exception as e:
         logger.error(f'LLM 调用失败: {e}')
@@ -396,10 +431,13 @@ def ask_course(course_id: int, question: str, top_k: Optional[int] = None) -> Di
             'snippet': snippet,
         })
 
-    return {
+    result = {
         'answer': answer,
         'sources': sources,
         'course_id': course_id,
         'question': question,
         'model': settings.AI_MODEL_NAME,
     }
+    if timing_enabled:
+        logger.info(f'[RAG][TIMING] course_id={course_id} total_sec={time.perf_counter() - request_start:.3f}')
+    return result

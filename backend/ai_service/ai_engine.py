@@ -80,11 +80,7 @@ class AIService:
         
         # 初始化本地模型（备用方案）
         self.local_embeddings = None
-        if TRANSFORMERS_AVAILABLE:
-            try:
-                self.local_embeddings = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-            except Exception as e:
-                print(f"Warning: Failed to load local embedding model: {e}")
+        self._local_embeddings_load_failed = False
     
     def _load_vector_store(self):
         """加载FAISS向量数据库"""
@@ -102,6 +98,22 @@ class AIService:
                 os.makedirs(self.vector_db_path, exist_ok=True)
         except Exception as e:
             print(f"Error loading vector store: {e}")
+
+    def _get_local_embeddings(self):
+        """Lazy-load the fallback embedding model to avoid blocking app startup."""
+        if self.local_embeddings is not None or self._local_embeddings_load_failed:
+            return self.local_embeddings
+
+        if not TRANSFORMERS_AVAILABLE:
+            return None
+
+        try:
+            self.local_embeddings = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+        except Exception as e:
+            self._local_embeddings_load_failed = True
+            print(f"Warning: Failed to load local embedding model: {e}")
+
+        return self.local_embeddings
     
     def _build_system_prompt(self, course_context: Optional[Dict] = None, mode: str = 'socratic') -> str:
         """
@@ -702,8 +714,9 @@ API是系统间通信的桥梁：
         try:
             if self.embeddings:
                 return self.embeddings.embed_query(text)
-            elif self.local_embeddings:
-                return self.local_embeddings.encode(text).tolist()
+            local_embeddings = self._get_local_embeddings()
+            if local_embeddings:
+                return local_embeddings.encode(text).tolist()
         except Exception as e:
             print(f"Error getting embeddings: {e}")
         

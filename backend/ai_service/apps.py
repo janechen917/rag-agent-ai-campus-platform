@@ -1,4 +1,9 @@
 from django.apps import AppConfig
+import logging
+import threading
+
+
+logger = logging.getLogger(__name__)
 
 
 class AiServiceConfig(AppConfig):
@@ -25,12 +30,25 @@ class AiServiceConfig(AppConfig):
                 )
                 scheduler.start()
 
-                import logging
-                logging.getLogger(__name__).info(
+                logger.info(
                     '[APScheduler] Quiz提醒任务已启动，每小时执行一次。'
                 )
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(
+                logger.warning(
                     f'[APScheduler] 启动失败（不影响主服务）: {e}'
                 )
+
+            # 后台预热 RAG embedding，避免学生首问时冷启动阻塞。
+            try:
+                from django.conf import settings
+                if getattr(settings, 'RAG_PREWARM_EMBEDDINGS', True):
+                    def _prewarm_rag_embeddings():
+                        try:
+                            from .rag import prewarm_embeddings
+                            prewarm_embeddings()
+                        except Exception as e:
+                            logger.warning(f'[RAG] embedding 预热失败（不影响主服务）: {e}')
+
+                    threading.Thread(target=_prewarm_rag_embeddings, daemon=True).start()
+            except Exception as e:
+                logger.warning(f'[RAG] embedding 预热线程启动失败（不影响主服务）: {e}')

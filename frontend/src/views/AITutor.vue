@@ -627,7 +627,7 @@ const sendMessage = async (message) => {
       response = await api.post('/api/ai/rag/ask/', {
         course_id: selectedCourseId.value,
         question: message
-      }, { timeout: 120000 })
+      })
       const data = response.data || {}
       if (data.code === 'NO_INDEX') {
         messages.value.push({

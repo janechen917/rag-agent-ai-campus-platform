@@ -37,6 +37,11 @@ if (-not (Test-Path $venvActivate)) {
     exit 1
 }
 
+# 让当前终端也切到后端目录并进入正确虚拟环境，避免停留在根目录 .venv。
+Set-Location $backendPath
+. $venvActivate
+Write-Host "[*] 当前终端已切换到 backend\venv : $env:VIRTUAL_ENV" -ForegroundColor DarkCyan
+
 Write-Host "[1/2] 启动后端 Django (http://localhost:8000) ..." -ForegroundColor Green
 Start-Process powershell -ArgumentList @(
     "-NoExit",

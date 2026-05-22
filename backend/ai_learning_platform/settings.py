@@ -275,6 +275,15 @@ RAG_MAX_DOC_CHARS = 500_000
 # 支持的文件后缀（小写）
 RAG_SUPPORTED_EXTS = {'.pdf', '.docx', '.pptx', '.md', '.txt'}
 
+# RAG 生成超时（秒）：避免上游模型网络抖动时长时间阻塞请求
+RAG_LLM_TIMEOUT_SEC = int(os.getenv('RAG_LLM_TIMEOUT_SEC', 90))
+# RAG 生成重试次数：设置较小值以便快速失败并返回可读错误
+RAG_LLM_MAX_RETRIES = int(os.getenv('RAG_LLM_MAX_RETRIES', 1))
+# 启动后后台预热 embedding，降低首问冷启动耗时
+RAG_PREWARM_EMBEDDINGS = os.getenv('RAG_PREWARM_EMBEDDINGS', 'True') == 'True'
+# 是否打印 RAG 各阶段耗时日志
+RAG_TIMING_LOG_ENABLED = os.getenv('RAG_TIMING_LOG_ENABLED', 'True') == 'True'
+
 # Celery配置
 CELERY_BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'
 CELERY_RESULT_BACKEND = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'
