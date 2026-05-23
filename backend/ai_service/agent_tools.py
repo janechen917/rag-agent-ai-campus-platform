@@ -43,11 +43,55 @@ class _QueryOnlyArgs(BaseModel):
     query: str = Field(..., description='要在当前课程材料中检索的问题/关键词')
 
 
+class _WebSearchArgs(BaseModel):
+    query: str = Field(..., description='要联网搜索的关键词，建议英文或中英结合，3-8 个词')
+    max_results: int = Field(5, description='返回的网页结果条数，默认 5，建议 3-8', ge=1, le=10)
+
+
 # ---------- 工具实现 ----------
 
 def _user_course_ids(user: User) -> List[int]:
     from courses.models import Enrollment
     return list(Enrollment.objects.filter(user=user).values_list('course_id', flat=True))
+
+
+def _build_web_search_tool() -> StructuredTool:
+    """构造联网搜索工具（DuckDuckGo，无需 API key）。"""
+
+    def web_search(query: str, max_results: int = 5) -> str:
+        query = (query or '').strip()
+        if not query:
+            return '查询关键词不能为空。'
+        max_results = max(1, min(int(max_results or 5), 10))
+        try:
+            from ddgs import DDGS
+            results = list(DDGS().text(query, max_results=max_results))
+        except Exception as e:
+            logger.exception('web_search via ddgs failed')
+            return f'联网搜索失败：{e}'
+        if not results:
+            return 'NO_WEB_RESULT: 联网未检索到相关内容。'
+        lines = [f'联网搜索"{query}" 共 {len(results)} 条：']
+        for i, r in enumerate(results, 1):
+            title = (r.get('title') or '').strip()
+            href = (r.get('href') or '').strip()
+            body = (r.get('body') or '').strip().replace('\n', ' ')
+            if len(body) > 240:
+                body = body[:240] + '…'
+            lines.append(f'{i}. {title}\n   {href}\n   摘要：{body}')
+        return '\n'.join(lines)
+
+    return StructuredTool.from_function(
+        func=web_search,
+        name='web_search',
+        description=(
+            '通过 DuckDuckGo 联网检索最新信息或教材外内容。'
+            '使用场景：(1) 课程知识库 / 通用知识都不够用；(2) 学生问到时事、版本号、行业现状；'
+            '(3) 需要补充权威外链。一次回复内最多调用 1 次。返回的每条结果包含 title / url / 摘要，'
+            '回复学生时务必引用至少 1 个 url，并标注「（联网补充）」。'
+        ),
+        args_schema=_WebSearchArgs,
+    )
 
 
 def build_student_tools(user: User) -> List[StructuredTool]:
@@ -169,6 +213,7 @@ def build_student_tools(user: User) -> List[StructuredTool]:
             description='获取一个 Quiz 的概要信息（标题、课程、题数、截止时间、已用次数）。需要 quiz_id。',
             args_schema=_QuizIdArgs,
         ),
+        _build_web_search_tool(),
     ]
 
 
@@ -220,9 +265,10 @@ def build_socratic_tools(user: User, course_id: int) -> List[StructuredTool]:
             description=(
                 '在当前所选课程的知识库中检索资料。当你需要确认教材怎么说、'
                 '或需要找具体例子来设计反问时调用。返回内容里如果出现 "NO_MATERIAL" 前缀，'
-                '表示教材未涉及，请改用通用知识作答并在回复开头标注「（教材中未直接提及）」。'
-                '只需 query 参数。'
+                '表示教材未涉及，请改用通用知识或调用 web_search 联网补充，'
+                '并在回复开头标注「（教材中未直接提及）」。只需 query 参数。'
             ),
             args_schema=_QueryOnlyArgs,
         ),
+        _build_web_search_tool(),
     ]

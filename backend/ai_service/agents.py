@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Dict, List, Optional
 
@@ -18,15 +19,16 @@ logger = logging.getLogger(__name__)
 
 _AGENT_SYSTEM_PROMPT = """你是「校园智慧学习平台」的学生学习助手 Agent。
 
-你能调用一组工具来获取该学生真实的课程、Quiz 和课程材料数据。
+你能调用一组工具获取该学生真实的课程、Quiz 和课程材料数据，也能通过 web_search 在 DuckDuckGo 上联网检索。
 
 工作原则：
-1. 优先使用工具拿到真实数据再回答，不要凭空编造课程名、quiz_id、截止时间等。
+1. 优先使用内部工具拿到真实数据再回答，不要凭空编造课程名、quiz_id、截止时间等。
 2. 当用户提到"我的课程 / 我的作业 / 我的 quiz"时，先用 list_my_courses 或 list_pending_quizzes 把范围定下来。
 3. 当用户问到具体课程内容/知识点时，先确认 course_id，再调用 search_course_materials 在该课程知识库里检索。
-4. 你最多可以连续调用 6 次工具，规划好顺序，不要重复调用同一个无参工具。
-5. 最终回答必须使用简体中文，结构清晰，必要时用列表。
-6. 如果用户问的事情和学习无关，礼貌拒绝并提示你的能力范围。
+4. 当以上内部数据不够用（课程知识库没命中、是时事/版本号/行业最新动态等），才调用 web_search 联网补充。**只要用了 web_search，回复正文里必须用 `（联网补充）` 标注，并在末尾用列表列出至少 2 个真实 url（直接照抄工具结果里的 href）。**
+5. 你最多可以连续调用 6 次工具，规划好顺序，不要重复调用同一个无参工具。
+6. 最终回答必须使用简体中文，结构清晰，必要时用列表。
+7. 如果用户问的事情和学习无关，礼貌拒绝并提示你的能力范围。
 """
 
 
@@ -132,6 +134,59 @@ def _summarize_steps(messages) -> List[Dict]:
     return out
 
 
+_URL_RE = re.compile(r'https?://[^\s\)\]\>，。、；,;]+')
+
+
+def _append_web_sources(final_output: str, steps: List[Dict]) -> str:
+    """若调用过 web_search 但最终回答里没有任何 URL，自动在末尾追加"参考链接"区块。
+
+    解析每个 web_search step 的 output（格式：编号 + title + url + 摘要），按顺序
+    抽取最多 5 条 (title, url)，附加到回答末尾。
+    """
+    if not final_output:
+        return final_output
+    web_outputs = [
+        s.get('output') or ''
+        for s in steps
+        if s.get('tool') == 'web_search' and isinstance(s.get('output'), str)
+    ]
+    if not web_outputs:
+        return final_output
+
+    # 已经有 url 引用就不重复追加
+    if _URL_RE.search(final_output):
+        return final_output
+
+    refs: List[str] = []
+    seen = set()
+    for text in web_outputs:
+        # 按"\d+\."分块抽取每条结果的 title 和 url
+        for block in re.split(r'\n(?=\d+\.\s)', text):
+            block = block.strip()
+            if not block or not block[0].isdigit():
+                continue
+            m_title = re.match(r'\d+\.\s*(.+)', block)
+            m_url = _URL_RE.search(block)
+            if not m_url:
+                continue
+            url = m_url.group(0)
+            if url in seen:
+                continue
+            seen.add(url)
+            title = (m_title.group(1).strip() if m_title else '').splitlines()[0]
+            title = title[:80] or url
+            refs.append(f'- [{title}]({url})')
+            if len(refs) >= 5:
+                break
+        if len(refs) >= 5:
+            break
+
+    if not refs:
+        return final_output
+
+    return f'{final_output.rstrip()}\n\n**📎 联网来源（DuckDuckGo）**\n' + '\n'.join(refs)
+
+
 def run_student_agent(
     user: User,
     message: str,
@@ -185,6 +240,9 @@ def run_student_agent(
     new_messages = all_messages[len(input_messages):] if all_messages else []
     steps = _summarize_steps(new_messages)
 
+    # 如果调了 web_search 但回复里没 url，自动追加来源链接
+    final_output = _append_web_sources(final_output, steps)
+
     logger.info(
         f'[AGENT][TIMING] user_id={user.id} elapsed_sec={elapsed} '
         f'tool_calls={len(steps)} input_len={len(message)}'
@@ -212,8 +270,9 @@ _SOCRATIC_SYSTEM_PROMPT = """你是一位严格的苏格拉底式大学导师，
 
 【阶段 2 · 检索（默认必须调用）】
 - 只要问题涉及具体课程内容/术语/概念/公式/案例（即非纯闲聊、非纯事实查询），**必须先调用一次** search_course_materials_in_course(query)，再决定怎么回复。
-- 一次回复最多调用工具 1 次，不要重复检索。
+- 一次回复最多调用 search_course_materials_in_course 工具 1 次，不要重复检索。
 - 如果工具返回内容以 "NO_MATERIAL" 开头，**回复开头必须写「（教材中未直接提及，以下基于通用知识）」**，然后再继续阶段 3/4。
+- 可选增强：出现 NO_MATERIAL 且你认为需要权威补充（时事、版本号、行业资料）时，可额外调用 web_search 1 次联网检索。**只要用了 web_search，正文标注「（联网补充）」并在末尾用 markdown 列表列出至少 2 个真实 url（照抄工具结果里的 href）。**
 
 【阶段 3 · 反问 / 提示】（默认行为）
 - 不要直接给最终答案。
@@ -381,6 +440,9 @@ def run_socratic_agent(
     if had_no_material and final_output and fallback_marker not in final_output[:40]:
         final_output = f'（教材中未直接提及，以下基于通用知识）\n{final_output}'
         logger.info(f'[SOCRATIC][FALLBACK_PATCH] user_id={user.id} course_id={course_id} 补充软兜底标注')
+
+    # 如果调了 web_search 但回复里没 url，自动追加来源链接
+    final_output = _append_web_sources(final_output, steps)
 
     logger.info(
         f'[SOCRATIC][TIMING] user_id={user.id} course_id={course_id} '

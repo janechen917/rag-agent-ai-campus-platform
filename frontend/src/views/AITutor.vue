@@ -538,6 +538,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
 import api from '@/api'
 
+// marked 默认开启换行解析
+marked.setOptions({ breaks: true, gfm: true })
+
 const router = useRouter()
 const userStore = useUserStore()
 const { t } = useI18n()
@@ -606,7 +609,15 @@ const isSubmitting = ref(false)
 const quizResult = ref(null)
 
 // --- Chat methods ---
-const formatMessage = (content) => marked(content)
+const formatMessage = (content) => {
+  let html = marked.parse(content || '')
+  // 给所有链接加 target=_blank（marked 默认不加），并把裸 URL 也转成可点击链接
+  html = html.replace(/<a\s+([^>]*?)>/gi, (m, attrs) => {
+    if (/target\s*=/i.test(attrs)) return `<a ${attrs}>`
+    return `<a ${attrs} target="_blank" rel="noopener noreferrer">`
+  })
+  return html
+}
 
 const formatTime = (timestamp) => {
   const date = new Date(timestamp)
@@ -1207,6 +1218,22 @@ onMounted(() => {
   padding: 10px;
   border-radius: 4px;
   overflow-x: auto;
+}
+
+.message .text :deep(a) {
+  color: #1976d2;
+  text-decoration: underline;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.message .text :deep(a:hover) {
+  color: #0d47a1;
+}
+
+.message.user .text :deep(a) {
+  color: #fff;
+  text-decoration: underline;
 }
 
 .message .text :deep(code) {
