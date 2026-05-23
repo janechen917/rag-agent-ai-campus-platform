@@ -1764,3 +1764,30 @@ def agent_run(request):
     result = run_student_agent(request.user, message, history)
     return Response(result)
 
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def agent_socratic_run(request):
+    """
+    POST /api/ai/agent/socratic/
+    Body: { "message": "...", "course_id": 123, "history": [{role, content}] }
+    需要传 course_id（学生当前选定的课程），Agent 会在该课程的 RAG 索引里查证后再反问。
+    """
+    message = request.data.get('message')
+    course_id = request.data.get('course_id')
+    history = request.data.get('history') or []
+    if not isinstance(message, str) or not message.strip():
+        return Response({'error': 'message 必填', 'code': 'EMPTY_MESSAGE', 'elapsed_sec': 0.0})
+    try:
+        course_id = int(course_id) if course_id is not None else None
+    except (TypeError, ValueError):
+        course_id = None
+    if not course_id:
+        return Response({'error': 'course_id 必填', 'code': 'NO_COURSE', 'elapsed_sec': 0.0})
+    if not isinstance(history, list):
+        history = []
+
+    from .agents import run_socratic_agent
+    result = run_socratic_agent(request.user, message, history, course_id)
+    return Response(result)
+

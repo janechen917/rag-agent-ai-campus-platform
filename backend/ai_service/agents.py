@@ -195,3 +195,201 @@ def run_student_agent(
         'steps': steps,
         'elapsed_sec': elapsed,
     }
+
+
+# ============================================================
+# 苏格拉底升级版 Agent —— 4 阶段策略 + 课程材料检索工具
+# ============================================================
+
+_SOCRATIC_SYSTEM_PROMPT = """你是一位严格的苏格拉底式大学导师，正在和当前选课学生进行 1v1 答疑。
+你能调用一个工具 search_course_materials_in_course 在当前课程的知识库里查证教材怎么讲。
+
+请按以下 4 阶段策略工作（在心里走一遍，但不要把"阶段名"暴露给学生）：
+
+【阶段 1 · 诊断】
+- 先判断学生这句话暴露了哪些概念漏洞、混淆点或思维盲区。
+- 判断这是"概念问题"、"计算题"、还是"开放讨论"。
+
+【阶段 2 · 检索（默认必须调用）】
+- 只要问题涉及具体课程内容/术语/概念/公式/案例（即非纯闲聊、非纯事实查询），**必须先调用一次** search_course_materials_in_course(query)，再决定怎么回复。
+- 一次回复最多调用工具 1 次，不要重复检索。
+- 如果工具返回内容以 "NO_MATERIAL" 开头，**回复开头必须写「（教材中未直接提及，以下基于通用知识）」**，然后再继续阶段 3/4。
+
+【阶段 3 · 反问 / 提示】（默认行为）
+- 不要直接给最终答案。
+- 设计一个**有指向性**的反问，把学生推回去思考（例如：「你觉得 X 和 Y 的关键区别在哪里？」「假设把这个条件去掉会怎样？」）。
+- 反问要建立在教材证据或学生原话上，不要泛泛而问。
+- 如果有教材证据，可以引用一句关键定义/例子，再用反问收尾。
+
+【阶段 4 · 揭示（必须切换的硬规则）】
+出现以下**任一**信号时，**必须立即停止反问，直接给出完整答案**（这是强制规则，不是建议）：
+
+A. 显式索取信号 —— 学生在最后一句里出现以下任意关键词/语义：
+   - "直接告诉我"、"直接说"、"直接给"、"直说"、"别反问"、"不要反问"、"不用反问"
+   - "标准答案"、"正确答案"、"给我答案"、"说结论"、"给结论"
+   - "tell me directly"、"just tell"、"the answer is"、"stop asking"、"no more questions"
+
+B. 学生连续受挫信号 —— 历史记录里学生最近 3 条消息中**至少 2 条**包含：
+   - "我不会"、"不知道"、"不懂"、"还是不懂"、"放弃"、"卡住"、"想不出"、"猜不到"
+   - "I don't know"、"idk"、"no idea"、"I give up"、"stuck"
+
+C. 事实性查询 —— 老师姓名、截止时间、章节位置等没有思考空间的事实问题。
+
+在揭示模式下：
+1) **第一句话**就要包含答案本身（不要再用「让我们一起想想…」之类开场）。
+2) 用 3–6 句把答案讲清楚，可分点。
+3) 结尾追加 **1 个**反思性追问（不是新概念，而是让学生用自己的话复述或迁移），例如"你能用自己的话再讲一遍吗？"或"如果把条件 X 改成 Y 会怎样？"。
+4) 如果系统在你之前注入了 "REVEAL_MODE: ON" 的 SystemMessage，必须按本节执行，禁止再反问。
+
+【全局规则】
+- 全程使用简体中文。
+- 反问最多 2 个，不要连珠炮。
+- 不要编造教材原文；引用必须来自工具返回。
+- 与学习无关的话题礼貌拒绝并提示能力范围。
+"""
+
+
+# 用于触发阶段 4 的关键词（小写匹配）
+_REVEAL_EXPLICIT_KEYWORDS = (
+    '直接告诉', '直接说', '直接给', '直说', '别反问', '不要反问', '不用反问',
+    '标准答案', '正确答案', '给我答案', '说结论', '给结论', '告诉我答案',
+    'tell me directly', 'just tell', 'the answer is', 'stop asking', 'no more question',
+)
+
+_REVEAL_STUCK_KEYWORDS = (
+    '我不会', '不知道', '不懂', '不明白', '放弃', '卡住', '想不出', '猜不到', '没思路',
+    "i don't know", 'idk', 'no idea', 'i give up', 'stuck',
+)
+
+
+def _should_force_reveal(message: str, history: Optional[List[Dict]]) -> Optional[str]:
+    """检测是否应进入阶段 4 揭示模式。返回触发原因字符串，否则 None。"""
+    msg_lower = (message or '').lower()
+    for kw in _REVEAL_EXPLICIT_KEYWORDS:
+        if kw in msg_lower:
+            return f'EXPLICIT_REQUEST(keyword={kw!r})'
+
+    if not history:
+        return None
+    # 取学生最近的 3 条 user 消息（含本轮 message 不算，因上面已经查过）
+    recent_user = []
+    for h in reversed(history):
+        if not isinstance(h, dict):
+            continue
+        if h.get('role') == 'user':
+            recent_user.append((h.get('content') or '').lower())
+            if len(recent_user) >= 3:
+                break
+    # 也把本轮 message 算上
+    recent_user.insert(0, msg_lower)
+    stuck_hits = 0
+    for txt in recent_user[:3]:
+        if any(kw in txt for kw in _REVEAL_STUCK_KEYWORDS):
+            stuck_hits += 1
+    if stuck_hits >= 2:
+        return f'STUCK_STREAK(hits={stuck_hits})'
+    return None
+
+
+def _build_socratic_executor(user: User, course_id: int):
+    """构造 LangChain 1.x create_agent 版苏格拉底 Agent。"""
+    from langchain.agents import create_agent
+
+    from .agent_tools import build_socratic_tools
+
+    tools = build_socratic_tools(user, course_id)
+    llm = _build_llm()
+    return create_agent(
+        model=llm,
+        tools=tools,
+        system_prompt=_SOCRATIC_SYSTEM_PROMPT,
+    )
+
+
+def run_socratic_agent(
+    user: User,
+    message: str,
+    history: Optional[List[Dict]] = None,
+    course_id: Optional[int] = None,
+) -> Dict:
+    """运行一次苏格拉底升级版 Agent。
+
+    返回结构同 run_student_agent：
+      成功: {output, steps, elapsed_sec}
+      失败: {error, code, elapsed_sec}
+    """
+    message = (message or '').strip()
+    if not message:
+        return {'error': '消息不能为空', 'code': 'EMPTY_MESSAGE', 'elapsed_sec': 0.0}
+    if not course_id:
+        return {'error': '苏格拉底 Agent 需要 course_id', 'code': 'NO_COURSE', 'elapsed_sec': 0.0}
+
+    start = time.perf_counter()
+    try:
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        executor = _build_socratic_executor(user, int(course_id))
+        chat_history = _normalize_history(history)
+
+        # 检测是否触发阶段 4 揭示模式
+        reveal_reason = _should_force_reveal(message, history)
+        extra_system = []
+        if reveal_reason:
+            extra_system.append(SystemMessage(content=(
+                'REVEAL_MODE: ON\n'
+                f'触发原因：{reveal_reason}\n'
+                '本轮必须切到【阶段 4 · 揭示】：第一句就给完整答案，'
+                '禁止用反问开场，禁止只给提示，禁止说"我们一起想想"之类的话；'
+                '答完用 3-6 句讲清楚后，结尾追加 1 个让学生复述/迁移的反思性追问。'
+            )))
+            logger.info(f'[SOCRATIC][REVEAL] user_id={user.id} reason={reveal_reason}')
+
+        input_messages = chat_history + extra_system + [HumanMessage(content=message)]
+        result = executor.invoke(
+            {'messages': input_messages},
+            config={'recursion_limit': 10},  # 苏格拉底场景至多 1 次工具调用，给小一点
+        )
+    except Exception as e:
+        elapsed = round(time.perf_counter() - start, 3)
+        logger.exception('run_socratic_agent failed')
+        return {
+            'error': f'苏格拉底 Agent 执行失败：{e}',
+            'code': 'AGENT_ERROR',
+            'elapsed_sec': elapsed,
+        }
+
+    elapsed = round(time.perf_counter() - start, 3)
+    all_messages = result.get('messages', []) if isinstance(result, dict) else []
+    final_output = ''
+    for msg in reversed(all_messages):
+        if getattr(msg, 'type', None) == 'ai' or msg.__class__.__name__ == 'AIMessage':
+            content = getattr(msg, 'content', '')
+            if isinstance(content, str) and content.strip():
+                final_output = content
+                break
+    new_messages = all_messages[len(input_messages):] if all_messages else []
+    steps = _summarize_steps(new_messages)
+
+    # 软兜底后处理：若工具返回过 NO_MATERIAL 但 LLM 没在开头加标注，强制补上
+    had_no_material = False
+    for s in steps:
+        out_text = s.get('output') or ''
+        if isinstance(out_text, str) and 'NO_MATERIAL' in out_text:
+            had_no_material = True
+            break
+    fallback_marker = '（教材中未直接提及'
+    if had_no_material and final_output and fallback_marker not in final_output[:40]:
+        final_output = f'（教材中未直接提及，以下基于通用知识）\n{final_output}'
+        logger.info(f'[SOCRATIC][FALLBACK_PATCH] user_id={user.id} course_id={course_id} 补充软兜底标注')
+
+    logger.info(
+        f'[SOCRATIC][TIMING] user_id={user.id} course_id={course_id} '
+        f'elapsed_sec={elapsed} tool_calls={len(steps)} input_len={len(message)} '
+        f'no_material={had_no_material}'
+    )
+
+    return {
+        'output': final_output or '（苏格拉底导师未给出回答）',
+        'steps': steps,
+        'elapsed_sec': elapsed,
+    }

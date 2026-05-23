@@ -9,7 +9,7 @@ from .views import (
     quiz_reminder_logs, send_quiz_reminder_now,
     debate_start, debate_attack, debate_profile, debate_quit, debate_delete,
     rag_ask, rag_build_index,
-    agent_run
+    agent_run, agent_socratic_run
 )
 
 router = DefaultRouter()
@@ -59,6 +59,7 @@ urlpatterns = [
 
     # 学习助手 Agent
     path('agent/run/', agent_run, name='agent_run'),
+    path('agent/socratic/', agent_socratic_run, name='agent_socratic_run'),
 ]
 
 # 手动添加ViewSet的URL，避免格式后缀转换器冲突

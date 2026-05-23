@@ -695,6 +695,28 @@ const sendMessage = async (message) => {
           timestamp: Date.now()
         })
       }
+    } else if (aiMode.value === 'socratic' && selectedCourseId.value && !hasFile) {
+      // 苏格拉底升级版 Agent：在选定课程的 RAG 知识库里查证 + 反问
+      response = await api.post('/api/ai/agent/socratic/', {
+        message,
+        course_id: selectedCourseId.value,
+        history: messages.value.slice(-10).map(m => ({ role: m.role, content: m.content }))
+      })
+      const data = response.data || {}
+      if (data.code) {
+        messages.value.push({
+          role: 'assistant',
+          content: data.error || t('aiTutor.errors.agentFailed'),
+          timestamp: Date.now()
+        })
+      } else {
+        messages.value.push({
+          role: 'assistant',
+          content: data.output,
+          agentSteps: data.steps || [],
+          timestamp: Date.now()
+        })
+      }
     } else if (hasFile) {
       const formData = new FormData()
       formData.append('message', message)

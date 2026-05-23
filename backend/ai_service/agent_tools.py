@@ -39,6 +39,10 @@ class _QuizIdArgs(BaseModel):
     quiz_id: int = Field(..., description='Quiz ID')
 
 
+class _QueryOnlyArgs(BaseModel):
+    query: str = Field(..., description='要在当前课程材料中检索的问题/关键词')
+
+
 # ---------- 工具实现 ----------
 
 def _user_course_ids(user: User) -> List[int]:
@@ -164,5 +168,61 @@ def build_student_tools(user: User) -> List[StructuredTool]:
             name='get_quiz_brief',
             description='获取一个 Quiz 的概要信息（标题、课程、题数、截止时间、已用次数）。需要 quiz_id。',
             args_schema=_QuizIdArgs,
+        ),
+    ]
+
+
+def build_socratic_tools(user: User, course_id: int) -> List[StructuredTool]:
+    """苏格拉底 Agent 专用：把 course_id 绑死，只暴露 query 参数。
+
+    返回 1 个工具：search_course_materials_in_course(query)
+    用途：让 Socratic Agent 在当前课程的 RAG 索引里查证后再设计反问。
+    """
+
+    def search_course_materials_in_course(query: str) -> str:
+        if course_id not in _user_course_ids(user):
+            return f'无权访问课程 {course_id}（你尚未选这门课）。'
+        try:
+            from . import rag
+            out = rag.ask_course(course_id, query)
+        except Exception as e:
+            logger.exception('socratic search_course_materials_in_course failed')
+            return f'调用课程材料检索失败：{e}'
+        if 'error' in out:
+            return f'NO_MATERIAL: 课程材料中未检索到相关内容（code={out.get("code")}）。'
+        answer = (out.get('answer') or '').strip()
+        sources = out.get('sources') or []
+        if not answer and not sources:
+            return 'NO_MATERIAL: 课程材料中未检索到相关内容。'
+        # 启发式：RAG 答案里若出现"未提及/不涉及"等否定信号，认定为低相关。
+        # 这是因为 similarity_search 永远会返回 top-k，answer 是 LLM 编出来的，不能直接信。
+        ans_lower = answer.lower()
+        no_mat_signals = (
+            '未提及', '未提到', '没有提到', '未涉及', '不涉及', '没有涉及',
+            '教材中没有', '材料中没有', '材料里没有', '资料中没有', '未覆盖',
+            '无法回答', '没有相关内容', '没有相关信息', '没有找到',
+            'not mentioned', 'not covered', 'no information', 'no mention',
+            "doesn't mention", 'does not mention', 'not in the material',
+        )
+        is_low_rel = any(sig in ans_lower for sig in no_mat_signals)
+        if is_low_rel:
+            return (
+                f'NO_MATERIAL: 教材中似乎未直接提及该问题，以下为 RAG 推断（可能不可靠）：\n'
+                f'{answer}'
+            )
+        src_lines = [f'  · {s.get("file","?")} p.{s.get("page","?")}' for s in sources[:4]]
+        return f'材料检索结果：\n{answer}\n来源：\n' + ('\n'.join(src_lines) if src_lines else '  （无）')
+
+    return [
+        StructuredTool.from_function(
+            func=search_course_materials_in_course,
+            name='search_course_materials_in_course',
+            description=(
+                '在当前所选课程的知识库中检索资料。当你需要确认教材怎么说、'
+                '或需要找具体例子来设计反问时调用。返回内容里如果出现 "NO_MATERIAL" 前缀，'
+                '表示教材未涉及，请改用通用知识作答并在回复开头标注「（教材中未直接提及）」。'
+                '只需 query 参数。'
+            ),
+            args_schema=_QueryOnlyArgs,
         ),
     ]
