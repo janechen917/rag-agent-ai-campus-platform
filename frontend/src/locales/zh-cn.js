@@ -134,9 +134,14 @@ export default {
     ragModeOff: '关闭：使用通用 AI 对话',
     sourcesTitle: '来源（{n} 条）',
     page: '第',
+    agentMode: '智能助手',
+    agentModeOn: '已启用：让 AI 自动调用工具回答（如查课程、查待办、查知识库）',
+    agentModeOff: '关闭智能助手',
+    agentStepsTitle: 'Agent 调用过程（{n} 步）',
     errors: {
       noIndex: '该课程尚未建立材料索引，请联系老师在后台执行索引构建。',
-      ragFailed: '课程材料检索失败，请稍后重试。'
+      ragFailed: '课程材料检索失败，请稍后重试。',
+      agentFailed: '智能助手执行失败，请稍后重试。'
     }
   }
 }

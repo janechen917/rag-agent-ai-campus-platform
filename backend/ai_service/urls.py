@@ -8,7 +8,8 @@ from .views import (
     quiz_statistics, my_quiz_submissions, teacher_analytics, pending_quizzes,
     quiz_reminder_logs, send_quiz_reminder_now,
     debate_start, debate_attack, debate_profile, debate_quit, debate_delete,
-    rag_ask, rag_build_index
+    rag_ask, rag_build_index,
+    agent_run
 )
 
 router = DefaultRouter()
@@ -55,6 +56,9 @@ urlpatterns = [
     # RAG 课程知识库
     path('rag/ask/', rag_ask, name='rag_ask'),
     path('rag/build_index/', rag_build_index, name='rag_build_index'),
+
+    # 学习助手 Agent
+    path('agent/run/', agent_run, name='agent_run'),
 ]
 
 # 手动添加ViewSet的URL，避免格式后缀转换器冲突

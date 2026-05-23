@@ -1742,3 +1742,25 @@ def rag_build_index(request):
         return Response({'error': f'建索引失败: {e}', 'code': 'BUILD_ERROR'}, status=500)
     return Response(result)
 
+
+# ---------- 学习助手 Agent ----------
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def agent_run(request):
+    """
+    POST /api/ai/agent/run/
+    Body: { "message": "...", "history": [{"role":"user|assistant","content":"..."}] }
+    返回: { "output", "steps", "elapsed_sec" } 或 { "error", "code", "elapsed_sec" }
+    """
+    message = request.data.get('message')
+    history = request.data.get('history') or []
+    if not isinstance(message, str) or not message.strip():
+        return Response({'error': 'message 必填', 'code': 'EMPTY_MESSAGE', 'elapsed_sec': 0.0})
+    if not isinstance(history, list):
+        history = []
+
+    from .agents import run_student_agent
+    result = run_student_agent(request.user, message, history)
+    return Response(result)
+

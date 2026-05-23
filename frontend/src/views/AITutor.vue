@@ -59,6 +59,21 @@
                 </el-collapse-item>
               </el-collapse>
             </div>
+            <div v-if="message.agentSteps && message.agentSteps.length" class="rag-sources">
+              <el-collapse>
+                <el-collapse-item :title="$t('aiTutor.agentStepsTitle', { n: message.agentSteps.length })">
+                  <div v-for="(step, i) in message.agentSteps" :key="i" class="rag-source-item">
+                    <div class="rag-source-meta">
+                      <el-icon><Cpu /></el-icon>
+                      <strong>[{{ i + 1 }}]</strong>
+                      <span>{{ step.tool }}</span>
+                    </div>
+                    <div class="rag-source-snippet">输入: {{ JSON.stringify(step.input) }}</div>
+                    <div class="rag-source-snippet">输出: {{ step.output }}</div>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
+            </div>
             <div class="time">{{ formatTime(message.timestamp) }}</div>
           </div>
         </div>
@@ -113,10 +128,19 @@
           <el-tooltip :content="useRagMode ? $t('aiTutor.ragModeOn') : $t('aiTutor.ragModeOff')" placement="top">
             <el-switch
               v-model="useRagMode"
-              :disabled="!selectedCourseId"
+              :disabled="!selectedCourseId || useAgentMode"
               :active-text="$t('aiTutor.courseMaterialMode')"
               size="default"
               style="margin-left: 12px"
+            />
+          </el-tooltip>
+          <el-tooltip :content="useAgentMode ? $t('aiTutor.agentModeOn') : $t('aiTutor.agentModeOff')" placement="top">
+            <el-switch
+              v-model="useAgentMode"
+              :active-text="$t('aiTutor.agentMode')"
+              size="default"
+              style="margin-left: 12px"
+              @change="onAgentModeChange"
             />
           </el-tooltip>
         </div>
@@ -542,6 +566,7 @@ const selectedCourseId = ref(null)
 const currentConversationId = ref(null)
 const aiMode = ref('socratic') // 'socratic' | 'direct'
 const useRagMode = ref(false) // 课程材料模式（基于 RAG 索引回答）
+const useAgentMode = ref(false) // 智能助手 Agent 模式（多步工具调用）
 
 // --- Quiz state ---
 const isTeacher = computed(() => userStore.user?.user_type === 'teacher')
@@ -622,7 +647,28 @@ const sendMessage = async (message) => {
 
   try {
     let response
-    if (useRagMode.value && selectedCourseId.value && !hasFile) {
+    if (useAgentMode.value && !hasFile) {
+      // 智能助手 Agent 模式：后端自动调用工具
+      response = await api.post('/api/ai/agent/run/', {
+        message,
+        history: messages.value.slice(-10).map(m => ({ role: m.role, content: m.content }))
+      })
+      const data = response.data || {}
+      if (data.code) {
+        messages.value.push({
+          role: 'assistant',
+          content: data.error || t('aiTutor.errors.agentFailed'),
+          timestamp: Date.now()
+        })
+      } else {
+        messages.value.push({
+          role: 'assistant',
+          content: data.output,
+          agentSteps: data.steps || [],
+          timestamp: Date.now()
+        })
+      }
+    } else if (useRagMode.value && selectedCourseId.value && !hasFile) {
       // 课程材料模式：基于 RAG 索引回答
       response = await api.post('/api/ai/rag/ask/', {
         course_id: selectedCourseId.value,
@@ -708,6 +754,12 @@ const goBack = () => {
 const toggleAiMode = () => {
   aiMode.value = aiMode.value === 'socratic' ? 'direct' : 'socratic'
   ElMessage.info(aiMode.value === 'socratic' ? '已切换为苏格拉底式引导模式' : '已切换为直接回答模式')
+}
+
+const onAgentModeChange = (val) => {
+  if (val) {
+    useRagMode.value = false
+  }
 }
 
 // --- File upload methods (Student) ---

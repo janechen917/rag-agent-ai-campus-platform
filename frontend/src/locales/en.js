@@ -134,9 +134,14 @@ export default {
     ragModeOff: 'Disabled: use general AI chat',
     sourcesTitle: 'Sources ({n})',
     page: 'p.',
+    agentMode: 'AI Agent',
+    agentModeOn: 'Enabled: AI may call tools to answer (courses, todos, knowledge base)',
+    agentModeOff: 'Turn off AI Agent',
+    agentStepsTitle: 'Agent steps ({n})',
     errors: {
       noIndex: 'This course has no material index yet. Please ask the teacher to build the index.',
-      ragFailed: 'Course material retrieval failed. Please try again later.'
+      ragFailed: 'Course material retrieval failed. Please try again later.',
+      agentFailed: 'AI Agent failed. Please try again later.'
     }
   }
 }
